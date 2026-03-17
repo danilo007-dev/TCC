@@ -1,0 +1,13 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+/* Prevent horizontal scroll */
+html, body {
+  overflow-x: hidden;
+}
+
+/* Safe area inset for mobile devices */
+.safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
