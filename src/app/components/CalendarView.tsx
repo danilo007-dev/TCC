@@ -1,301 +1,295 @@
 import { useState } from "react";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
-import { motion } from "motion/react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths } from "date-fns";
+import { ChevronLeft, ChevronRight, X, ArrowRight } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { useNavigate } from "react-router";
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  isSameDay,
+  isToday,
+  addMonths,
+  subMonths,
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Card } from "./ui/card";
-import { Button } from "./ui/button";
-import { HelpfulHint } from "./HelpfulHint";
-import { Badge } from "./ui/badge";
 
 interface CalendarEvent {
   id: string;
   date: Date;
   title: string;
   type: "task" | "routine" | "goal";
-  color: string;
+  taskId?: string; // ID para navegação (tarefas)
 }
 
+const TYPE_CONFIG = {
+  task:    { label: "Tarefa",  bg: "bg-blue-500",    text: "text-white", dot: "bg-blue-500",    hover: "hover:bg-blue-600"    },
+  routine: { label: "Rotina",  bg: "bg-purple-500",  text: "text-white", dot: "bg-purple-500",  hover: "hover:bg-purple-600"  },
+  goal:    { label: "Meta",    bg: "bg-emerald-500", text: "text-white", dot: "bg-emerald-500", hover: "hover:bg-emerald-600" },
+};
+
+const WEEK_DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+const EVENTS: CalendarEvent[] = [
+  { id: "1",  date: new Date(2026, 2, 13), title: "Tomar medicação",    type: "routine" },
+  { id: "2",  date: new Date(2026, 2, 13), title: "Revisar projeto",    type: "task",    taskId: "1" },
+  { id: "3",  date: new Date(2026, 2, 14), title: "Exercícios",         type: "routine" },
+  { id: "4",  date: new Date(2026, 2, 15), title: "Estudar React",      type: "goal"    },
+  { id: "5",  date: new Date(2026, 2, 16), title: "Tomar medicação",    type: "routine" },
+  { id: "6",  date: new Date(2026, 2, 18), title: "Reunião importante", type: "task",    taskId: "2" },
+  { id: "7",  date: new Date(2026, 2, 18), title: "Estudar biologia",   type: "task",    taskId: "1" },
+  { id: "8",  date: new Date(2026, 2, 18), title: "Exercícios",         type: "routine" },
+  { id: "9",  date: new Date(2026, 2, 20), title: "Exercícios",         type: "routine" },
+  { id: "10", date: new Date(2026, 2, 22), title: "Ler livro",          type: "goal"    },
+  { id: "11", date: new Date(2026, 2, 25), title: "Comprar presente",   type: "task",    taskId: "2" },
+  { id: "12", date: new Date(2026, 2, 25), title: "Trabalho história",  type: "task",    taskId: "3" },
+];
+
+const MAX_VISIBLE = 2;
+
 export function CalendarView() {
+  const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
-  // Mock events
-  const events: CalendarEvent[] = [
-    {
-      id: "1",
-      date: new Date(2026, 2, 13), // Today
-      title: "Tomar medicação",
-      type: "routine",
-      color: "bg-purple-500",
-    },
-    {
-      id: "2",
-      date: new Date(2026, 2, 13),
-      title: "Revisar projeto",
-      type: "task",
-      color: "bg-blue-500",
-    },
-    {
-      id: "3",
-      date: new Date(2026, 2, 14),
-      title: "Exercícios",
-      type: "routine",
-      color: "bg-purple-500",
-    },
-    {
-      id: "4",
-      date: new Date(2026, 2, 15),
-      title: "Estudar React",
-      type: "goal",
-      color: "bg-green-500",
-    },
-    {
-      id: "5",
-      date: new Date(2026, 2, 16),
-      title: "Tomar medicação",
-      type: "routine",
-      color: "bg-purple-500",
-    },
-    {
-      id: "6",
-      date: new Date(2026, 2, 18),
-      title: "Reunião importante",
-      type: "task",
-      color: "bg-blue-500",
-    },
-  ];
+  const monthStart   = startOfMonth(currentMonth);
+  const daysInMonth  = eachDayOfInterval({ start: monthStart, end: endOfMonth(currentMonth) });
+  const startWeekday = monthStart.getDay();
 
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const getEvents = (date: Date) => EVENTS.filter((e) => isSameDay(e.date, date));
+  const selectedEvents = selectedDate ? getEvents(selectedDate) : [];
 
-  // Get first day of month (0 = Sunday, 1 = Monday, etc.)
-  const firstDayOfMonth = monthStart.getDay();
-
-  // Days of week
-  const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-  const getEventsForDate = (date: Date) => {
-    return events.filter((event) => isSameDay(event.date, date));
+  const handleDayClick = (day: Date) => {
+    setSelectedDate(selectedDate && isSameDay(day, selectedDate) ? null : day);
   };
 
-  const selectedDateEvents = selectedDate ? getEventsForDate(selectedDate) : [];
-
-  const previousMonth = () => {
-    setCurrentMonth(subMonths(currentMonth, 1));
-  };
-
-  const nextMonth = () => {
-    setCurrentMonth(addMonths(currentMonth, 1));
+  const handleEventClick = (event: CalendarEvent, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (event.type === "task" && event.taskId) {
+      navigate(`/focus/${event.taskId}`);
+    } else if (event.type === "routine") {
+      navigate("/routines");
+    } else if (event.type === "goal") {
+      navigate("/goals");
+    }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="bg-blue-100 p-2 rounded-lg">
-            <CalendarIcon className="size-6 text-blue-600" />
-          </div>
-          <h1 className="text-2xl font-semibold text-gray-900">Calendário</h1>
+    /*
+      FIX altura: usa h-[calc(100vh-88px)] para preencher toda a área disponível
+      descontando o header do Layout (py-6 = 24px top + 24px bottom + margem = ~88px)
+    */
+    <div className="flex flex-col -mx-8 -my-6 px-8 py-6" style={{ height: "calc(100vh - 0px)" }}>
+
+      {/* HEADER */}
+      <div className="flex items-center justify-between mb-4 flex-shrink-0">
+        <h1 className="text-2xl font-semibold text-gray-900 capitalize">
+          {format(currentMonth, "MMMM yyyy", { locale: ptBR })}
+        </h1>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => { setCurrentMonth(new Date()); setSelectedDate(null); }}
+            className="px-4 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors mr-2"
+          >
+            Hoje
+          </button>
+          <button
+            onClick={() => { setCurrentMonth(subMonths(currentMonth, 1)); setSelectedDate(null); }}
+            className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+          <button
+            onClick={() => { setCurrentMonth(addMonths(currentMonth, 1)); setSelectedDate(null); }}
+            className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+          >
+            <ChevronRight className="size-5" />
+          </button>
         </div>
-        <p className="text-gray-600">
-          Visualize suas tarefas, rotinas e metas em um calendário.
-        </p>
       </div>
 
-      {/* Helpful Hint */}
-      <HelpfulHint
-        title="Visão geral ajuda no planejamento"
-        message="Ver tudo organizado visualmente reduz a ansiedade sobre o futuro."
-      />
+      {/* BODY — ocupa todo o espaço restante */}
+      <div className="flex gap-4 flex-1 min-h-0 pb-6">
 
-      {/* Legend */}
-      <Card className="p-4">
-        <p className="text-sm font-medium text-gray-700 mb-3">Legenda</p>
-        <div className="flex flex-wrap gap-3">
-          <div className="flex items-center gap-2">
-            <div className="size-3 rounded-full bg-blue-500"></div>
-            <span className="text-sm text-gray-600">Tarefas</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="size-3 rounded-full bg-purple-500"></div>
-            <span className="text-sm text-gray-600">Rotinas</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="size-3 rounded-full bg-green-500"></div>
-            <span className="text-sm text-gray-600">Metas</span>
-          </div>
-        </div>
-      </Card>
+        {/* CALENDÁRIO */}
+        <div className="flex-1 flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden min-w-0">
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendar */}
-        <Card className="p-6 lg:col-span-2">
-          {/* Month Navigation */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">
-              {format(currentMonth, "MMMM yyyy", { locale: ptBR })}
-            </h2>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={previousMonth}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={nextMonth}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
+          {/* Cabeçalho dias da semana */}
+          <div className="grid grid-cols-7 border-b border-gray-100 flex-shrink-0">
+            {WEEK_DAYS.map((d) => (
+              <div key={d} className="text-center text-xs font-semibold text-gray-400 py-3 uppercase tracking-widest">
+                {d}
+              </div>
+            ))}
           </div>
 
-          {/* Calendar Grid */}
-          <div className="space-y-2">
-            {/* Week Days Header */}
-            <div className="grid grid-cols-7 gap-2 mb-2">
-              {weekDays.map((day) => (
-                <div
-                  key={day}
-                  className="text-center text-sm font-medium text-gray-500 py-2"
+          {/* Grid — flex-1 para preencher toda a altura */}
+          <div className="flex-1 grid grid-cols-7 divide-x divide-y divide-gray-100" style={{ gridAutoRows: "1fr" }}>
+
+            {/* Células vazias */}
+            {Array.from({ length: startWeekday }).map((_, i) => (
+              <div key={`empty-${i}`} className="bg-gray-50/40" />
+            ))}
+
+            {daysInMonth.map((day) => {
+              const dayEvents  = getEvents(day);
+              const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
+              const isTodayDay = isToday(day);
+              const visible    = dayEvents.slice(0, MAX_VISIBLE);
+              const overflow   = dayEvents.length - MAX_VISIBLE;
+
+              return (
+                <motion.div
+                  key={day.toISOString()}
+                  onClick={() => handleDayClick(day)}
+                  whileTap={{ scale: 0.98 }}
+                  className={`
+                    relative flex flex-col p-2 cursor-pointer transition-colors
+                    ${isSelected ? "bg-purple-50" : "hover:bg-gray-50/80"}
+                  `}
                 >
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar Days */}
-            <div className="grid grid-cols-7 gap-2">
-              {/* Empty cells for days before month starts */}
-              {Array.from({ length: firstDayOfMonth }).map((_, index) => (
-                <div key={`empty-${index}`} className="aspect-square" />
-              ))}
-
-              {/* Actual days */}
-              {daysInMonth.map((day) => {
-                const dayEvents = getEventsForDate(day);
-                const isSelected = selectedDate && isSameDay(day, selectedDate);
-                const isTodayDate = isToday(day);
-
-                return (
-                  <motion.button
-                    key={day.toISOString()}
-                    onClick={() => setSelectedDate(day)}
-                    className={`aspect-square p-2 rounded-lg border-2 transition-all relative ${
-                      isSelected
-                        ? "border-purple-500 bg-purple-50"
-                        : isTodayDate
-                        ? "border-blue-400 bg-blue-50"
-                        : "border-gray-200 hover:border-gray-300 bg-white"
-                    }`}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <span
-                      className={`text-sm font-medium ${
-                        isSelected
-                          ? "text-purple-700"
-                          : isTodayDate
-                          ? "text-blue-700"
-                          : "text-gray-700"
-                      }`}
-                    >
+                  {/* Número */}
+                  <div className="flex justify-center mb-1.5 flex-shrink-0">
+                    <span className={`
+                      w-7 h-7 flex items-center justify-center rounded-full
+                      text-sm font-medium leading-none transition-colors
+                      ${isTodayDay
+                        ? "bg-purple-600 text-white font-bold"
+                        : isSelected
+                        ? "bg-purple-100 text-purple-700"
+                        : "text-gray-700"
+                      }
+                    `}>
                       {format(day, "d")}
                     </span>
+                  </div>
 
-                    {/* Event Dots */}
-                    {dayEvents.length > 0 && (
-                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1">
-                        {dayEvents.slice(0, 3).map((event, idx) => (
-                          <div
-                            key={event.id}
-                            className={`size-1.5 rounded-full ${event.color}`}
-                          />
-                        ))}
+                  {/* Pílulas de eventos */}
+                  <div className="flex flex-col gap-[3px]">
+                    {visible.map((event) => {
+                      const cfg = TYPE_CONFIG[event.type];
+                      return (
+                        <motion.div
+                          key={event.id}
+                          whileHover={{ scale: 1.02, opacity: 0.9 }}
+                          onClick={(e) => handleEventClick(event, e)}
+                          className={`
+                            ${cfg.bg} ${cfg.text} ${cfg.hover}
+                            text-[10px] font-medium px-1.5 py-[3px]
+                            rounded-[4px] truncate leading-tight
+                            cursor-pointer transition-colors
+                          `}
+                        >
+                          {event.title}
+                        </motion.div>
+                      );
+                    })}
+
+                    {overflow > 0 && (
+                      <div className="text-[10px] text-gray-400 font-medium px-1">
+                        +{overflow} mais
                       </div>
                     )}
-                  </motion.button>
-                );
-              })}
-            </div>
-          </div>
-        </Card>
-
-        {/* Selected Date Details */}
-        <Card className="p-6">
-          <h3 className="font-medium text-gray-900 mb-4">
-            {selectedDate
-              ? format(selectedDate, "d 'de' MMMM", { locale: ptBR })
-              : "Selecione um dia"}
-          </h3>
-
-          {selectedDate && selectedDateEvents.length > 0 ? (
-            <div className="space-y-3">
-              {selectedDateEvents.map((event) => (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="p-3 rounded-lg bg-gray-50 border border-gray-200"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`size-3 rounded-full ${event.color} mt-1`} />
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900 text-sm">
-                        {event.title}
-                      </p>
-                      <Badge
-                        variant="outline"
-                        className="mt-1 text-xs"
-                      >
-                        {event.type === "task"
-                          ? "Tarefa"
-                          : event.type === "routine"
-                          ? "Rotina"
-                          : "Meta"}
-                      </Badge>
-                    </div>
                   </div>
                 </motion.div>
-              ))}
-            </div>
-          ) : selectedDate && selectedDateEvents.length === 0 ? (
-            <div className="text-center py-8">
-              <CalendarIcon className="size-12 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">
-                Nenhuma atividade neste dia
-              </p>
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <CalendarIcon className="size-12 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">
-                Clique em um dia para ver detalhes
-              </p>
-            </div>
-          )}
+              );
+            })}
+          </div>
+        </div>
 
-          {/* Quick Stats */}
-          {selectedDate && selectedDateEvents.length > 0 && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-xs font-medium text-gray-500 mb-2">
-                Resumo do dia
-              </p>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Total de atividades</span>
-                <span className="font-semibold text-purple-700">
-                  {selectedDateEvents.length}
-                </span>
+        {/* PAINEL LATERAL */}
+        <AnimatePresence>
+          {selectedDate && (
+            <motion.div
+              key="side-panel"
+              initial={{ opacity: 0, x: 20, width: 0 }}
+              animate={{ opacity: 1, x: 0, width: 256 }}
+              exit={{ opacity: 0, x: 20, width: 0 }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              className="flex-shrink-0 overflow-hidden"
+            >
+              <div className="w-64 h-full bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col">
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 flex-shrink-0">
+                  <div>
+                    <p className="font-semibold text-gray-900 capitalize text-sm">
+                      {format(selectedDate, "EEEE", { locale: ptBR })}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {format(selectedDate, "d 'de' MMMM", { locale: ptBR })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedDate(null)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-400"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+
+                {/* Lista de eventos */}
+                <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+                  <AnimatePresence mode="wait">
+                    {selectedEvents.length > 0 ? (
+                      selectedEvents.map((event, i) => {
+                        const cfg = TYPE_CONFIG[event.type];
+                        const isNavigable = event.type === "task" || event.type === "routine" || event.type === "goal";
+
+                        return (
+                          <motion.button
+                            key={event.id}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.05 }}
+                            onClick={(e) => handleEventClick(event, e as unknown as React.MouseEvent)}
+                            className={`
+                              w-full flex items-center gap-3 p-3 rounded-xl
+                              bg-gray-50 hover:bg-gray-100 transition-colors
+                              text-left group
+                              ${isNavigable ? "cursor-pointer" : "cursor-default"}
+                            `}
+                          >
+                            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-800 truncate">{event.title}</p>
+                              <p className="text-xs text-gray-400">{cfg.label}</p>
+                            </div>
+                            {/* Seta de navegação — aparece no hover */}
+                            {isNavigable && (
+                              <ArrowRight className="size-4 text-gray-300 group-hover:text-gray-500 transition-colors flex-shrink-0" />
+                            )}
+                          </motion.button>
+                        );
+                      })
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex flex-col items-center justify-center py-12 text-center"
+                      >
+                        <div className="text-4xl mb-3">🌿</div>
+                        <p className="text-sm text-gray-400">Dia livre!</p>
+                        <p className="text-xs text-gray-300 mt-1">Nenhuma atividade</p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Rodapé */}
+                {selectedEvents.length > 0 && (
+                  <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0">
+                    <p className="text-xs text-gray-400 text-center">
+                      <span className="font-semibold text-purple-600">{selectedEvents.length}</span>{" "}
+                      {selectedEvents.length === 1 ? "atividade" : "atividades"} neste dia
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
+            </motion.div>
           )}
-        </Card>
+        </AnimatePresence>
       </div>
     </div>
   );
