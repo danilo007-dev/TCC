@@ -9,6 +9,7 @@ import { Progress } from "./components/Progress";
 import { Routines } from "./components/Routines";
 import { Goals } from "./components/Goals";
 import { CalendarView } from "./components/CalendarView";
+import { MindDump } from "./components/MindDump";
 import { NotFound } from "./components/NotFound";
 
 export const router = createBrowserRouter([
@@ -16,16 +17,17 @@ export const router = createBrowserRouter([
     path: "/",
     Component: Layout,
     children: [
-      { index: true, Component: Onboarding },
-      { path: "dashboard", Component: Dashboard },
-      { path: "capture", Component: QuickCapture },
-      { path: "routines", Component: Routines },
-      { path: "goals", Component: Goals },
-      { path: "calendar", Component: CalendarView },
-      { path: "focus/:taskId", Component: FocusMode },
-      { path: "chat", Component: AIChat },
-      { path: "progress", Component: Progress },
-      { path: "*", Component: NotFound },
+      { index: true,           Component: Onboarding   },
+      { path: "dashboard",     Component: Dashboard    },
+      { path: "capture",       Component: QuickCapture },
+      { path: "routines",      Component: Routines     },
+      { path: "goals",         Component: Goals        },
+      { path: "calendar",      Component: CalendarView },
+      { path: "minddump",      Component: MindDump     },
+      { path: "focus/:taskId", Component: FocusMode    },
+      { path: "chat",          Component: AIChat       },
+      { path: "progress",      Component: Progress     },
+      { path: "*",             Component: NotFound     },
     ],
   },
 ]);

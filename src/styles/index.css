@@ -11,3 +11,10 @@ html, body {
 .safe-area-inset-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+/* Placeholder para o editor rich text (contentEditable) */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #d1d5db;
+  pointer-events: none;
+}
