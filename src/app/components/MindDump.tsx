@@ -585,6 +585,13 @@ function EditNoteModal({ note, folders, onClose, onSave, onDelete }: {
   const buildInitialHtml = (): string => {
     const blocks = note.blocks;
     if (!blocks.length) return "<p><br></p>";
+
+    // Compatibilidade com notas já salvas como HTML completo no único bloco.
+    if (blocks.length === 1 && blocks[0].type === "paragraph") {
+      const raw = (blocks[0].text ?? "").trim();
+      if (raw.startsWith("<")) return raw;
+    }
+
     const parts: string[] = [];
     let i = 0;
     while (i < blocks.length) {
@@ -597,8 +604,8 @@ function EditNoteModal({ note, folders, onClose, onSave, onDelete }: {
           const st  = cb.checked ? ' style="text-decoration:line-through;color:#9ca3af"' : "";
           cbItems.push(
             `<li data-cb="1" style="display:flex;align-items:center;list-style:none;padding:1px 0;"${st}>` +
-            `<input type="checkbox" style="accent-color:#7c3aed;width:14px;height:14px;margin-right:8px;flex-shrink:0;cursor:pointer;"${chk}/>` +
-            `<span style="flex:1;outline:none;" contenteditable="true">${cb.text || ""}</span></li>`
+            `<input type="checkbox" contenteditable="false" style="accent-color:#7c3aed;width:14px;height:14px;margin-right:8px;flex-shrink:0;cursor:pointer;"${chk}/>` +
+            `<span style="flex:1;outline:none;min-width:4px;display:block;">${cb.text || ""}</span></li>`
           );
           i++;
         }
@@ -667,9 +674,19 @@ function EditNoteModal({ note, folders, onClose, onSave, onDelete }: {
   };
 
   // ── Salva / restaura seleção ──────────────────────────────────────────────
+  const isSelectionInsideEditor = () => {
+    const el = editorRef.current;
+    const sel = window.getSelection();
+    if (!el || !sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    return el.contains(range.startContainer) && el.contains(range.endContainer);
+  };
+
   const saveSelection = () => {
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) savedSelRef.current = sel.getRangeAt(0).cloneRange();
+    if (sel && sel.rangeCount > 0 && isSelectionInsideEditor()) {
+      savedSelRef.current = sel.getRangeAt(0).cloneRange();
+    }
   };
 
   const restoreSelection = () => {
@@ -682,6 +699,7 @@ function EditNoteModal({ note, folders, onClose, onSave, onDelete }: {
 
   // ── Detecta estado da toolbar ─────────────────────────────────────────────
   const updateFmt = () => {
+    saveSelection();
     try {
       setFmt({
         bold:      document.queryCommandState("bold"),
@@ -699,10 +717,44 @@ function EditNoteModal({ note, folders, onClose, onSave, onDelete }: {
   };
 
   // ── Executa comando preservando seleção ───────────────────────────────────
+  const applyListFallback = (listTag: "ul" | "ol") => {
+    restoreSelection();
+    const el = editorRef.current;
+    const sel = window.getSelection();
+    if (!el || !sel || sel.rangeCount === 0) return;
+
+    const range = sel.getRangeAt(0);
+    const tagStart = `<${listTag}><li>`;
+    const tagEnd = `</li></${listTag}>`;
+
+    if (range.collapsed) {
+      document.execCommand("insertHTML", false, `${tagStart}<br>${tagEnd}`);
+      return;
+    }
+
+    const frag = range.extractContents();
+    const list = document.createElement(listTag);
+    const li = document.createElement("li");
+    li.appendChild(frag);
+    if (!li.textContent?.trim()) li.innerHTML = "<br>";
+    list.appendChild(li);
+    range.insertNode(list);
+
+    const newRange = document.createRange();
+    newRange.selectNodeContents(li);
+    newRange.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+  };
+
   const exec = (cmd: string, val?: string) => {
     restoreSelection();
     editorRef.current?.focus();
-    document.execCommand(cmd, false, val);
+    const ok = document.execCommand(cmd, false, val);
+    if (!ok && (cmd === "insertUnorderedList" || cmd === "insertOrderedList")) {
+      applyListFallback(cmd === "insertOrderedList" ? "ol" : "ul");
+    }
+    saveSelection();
     updateFmt();
   };
 
@@ -767,13 +819,13 @@ function EditNoteModal({ note, folders, onClose, onSave, onDelete }: {
 
     const cb = document.createElement("input");
     cb.type = "checkbox";
+    cb.setAttribute("contenteditable", "false");
     cb.style.cssText = "accent-color:#7c3aed;width:14px;height:14px;margin-right:8px;flex-shrink:0;cursor:pointer;";
     cb.addEventListener("change", () => handleCbChange(cb));
 
-    // Span editável — sem placeholder, sem zero-width space
+    // Span editável herdando contentEditable do editor pai
     const span = document.createElement("span");
-    span.contentEditable = "true";
-    span.style.cssText   = "flex:1;outline:none;min-width:4px;";
+    span.style.cssText   = "flex:1;outline:none;min-width:4px;display:block;";
 
     li.appendChild(cb);
     li.appendChild(span);
@@ -833,12 +885,12 @@ function EditNoteModal({ note, folders, onClose, onSave, onDelete }: {
 
     const newCb = document.createElement("input");
     newCb.type  = "checkbox";
+    newCb.setAttribute("contenteditable", "false");
     newCb.style.cssText = "accent-color:#7c3aed;width:14px;height:14px;margin-right:8px;flex-shrink:0;cursor:pointer;";
     newCb.addEventListener("change", () => handleCbChange(newCb));
 
     const newSpan = document.createElement("span");
-    newSpan.contentEditable = "true";
-    newSpan.style.cssText   = "flex:1;outline:none;min-width:4px;";
+    newSpan.style.cssText   = "flex:1;outline:none;min-width:4px;display:block;";
 
     newLi.appendChild(newCb);
     newLi.appendChild(newSpan);
@@ -1017,6 +1069,7 @@ function EditNoteModal({ note, folders, onClose, onSave, onDelete }: {
             onMouseUp={updateFmt}
             onSelect={updateFmt}
             onInput={updateFmt}
+            onFocus={updateFmt}
             className="min-h-full px-6 py-4 outline-none text-gray-800 leading-relaxed"
             style={{ wordBreak: "break-word" }}
           />

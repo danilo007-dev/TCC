@@ -10,6 +10,7 @@ import { Routines } from "./components/Routines";
 import { Goals } from "./components/Goals";
 import { CalendarView } from "./components/CalendarView";
 import { MindDump } from "./components/MindDump";
+import { Settings } from "./components/Settings";
 import { NotFound } from "./components/NotFound";
 
 export const router = createBrowserRouter([
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
       { path: "goals",         Component: Goals        },
       { path: "calendar",      Component: CalendarView },
       { path: "minddump",      Component: MindDump     },
+      { path: "settings",      Component: Settings     },
       { path: "focus/:taskId", Component: FocusMode    },
       { path: "chat",          Component: AIChat       },
       { path: "progress",      Component: Progress     },

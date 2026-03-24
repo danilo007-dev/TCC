@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { Brain, Home, MessageCircle, Plus, TrendingUp, Repeat, Target, Calendar, Wind } from "lucide-react";
+import { Brain, Home, MessageCircle, Plus, TrendingUp, Repeat, Target, Calendar, Wind, Settings } from "lucide-react";
 import { motion } from "motion/react";
 
 export function Layout() {
@@ -17,6 +17,7 @@ export function Layout() {
     { path: "/minddump",   icon: Wind,          label: "Mente Livre", section: "organize" },
     { path: "/chat",       icon: MessageCircle, label: "Assistente",  section: "support"  },
     { path: "/progress",   icon: TrendingUp,    label: "Progresso",   section: "support"  },
+    { path: "/settings",   icon: Settings,      label: "Config",      section: "support"  },
   ];
 
   const NavButton = ({ item }: { item: typeof navItems[0] }) => {
