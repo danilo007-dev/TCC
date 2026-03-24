@@ -554,328 +554,481 @@ function FolderModal({ title, initialName, initialColor, onClose, onSave }: {
   );
 }
 
+
 // ═════════════════════════════════════════════════════════════════════════════
-// EDITOR BASEADO EM BLOCOS — sem contentEditable, sem bugs
+// EDITOR RICH TEXT — único contentEditable, tudo inline
 // ═════════════════════════════════════════════════════════════════════════════
 
 function EditNoteModal({ note, folders, onClose, onSave, onDelete }: {
-  note:Note; folders:NoteFolder[];
-  onClose:()=>void; onSave:(id:string,title:string,blocks:Block[])=>void; onDelete:(id:string)=>void;
+  note: Note; folders: NoteFolder[];
+  onClose: () => void;
+  onSave: (id: string, title: string, blocks: Block[]) => void;
+  onDelete: (id: string) => void;
 }) {
-  const [title, setTitle]     = useState(note.title);
-  const [blocks, setBlocks]   = useState<Block[]>(note.blocks.length ? note.blocks : [mkBlock()]);
-  const [focusId, setFocusId] = useState<string|null>(note.blocks[0]?.id ?? null);
+  const [title, setTitle]       = useState(note.title);
   const [openMenu, setOpenMenu] = useState<"size"|"color"|"bg"|null>(null);
+  const [activeSz, setActiveSz] = useState("16px");
+  const [fmt, setFmt] = useState({
+    bold: false, italic: false, underline: false, strike: false,
+    alignL: true, alignC: false, alignR: false,
+    bullet: false, ordered: false,
+    color: "#1f2937",
+  });
 
-  const activeFmt = blocks.find((b) => b.id === focusId)?.format ?? mkFormat();
-  const activeType = blocks.find((b) => b.id === focusId)?.type ?? "paragraph";
+  const editorRef    = useRef<HTMLDivElement>(null);
+  const savedSelRef  = useRef<Range | null>(null);
 
   const folder = folders.find((f) => f.id === note.folderId);
   const cfg    = folder ? getColor(folder.color) : null;
+
+  // ── Monta HTML inicial ────────────────────────────────────────────────────
+  const buildInitialHtml = (): string => {
+    const blocks = note.blocks;
+    if (!blocks.length) return "<p><br></p>";
+    const parts: string[] = [];
+    let i = 0;
+    while (i < blocks.length) {
+      const b = blocks[i];
+      if (b.type === "checkbox") {
+        const cbItems: string[] = [];
+        while (i < blocks.length && blocks[i].type === "checkbox") {
+          const cb = blocks[i];
+          const chk = cb.checked ? " checked" : "";
+          const st  = cb.checked ? ' style="text-decoration:line-through;color:#9ca3af"' : "";
+          cbItems.push(
+            `<li data-cb="1" style="display:flex;align-items:center;list-style:none;padding:1px 0;"${st}>` +
+            `<input type="checkbox" style="accent-color:#7c3aed;width:14px;height:14px;margin-right:8px;flex-shrink:0;cursor:pointer;"${chk}/>` +
+            `<span style="flex:1;outline:none;" contenteditable="true">${cb.text || ""}</span></li>`
+          );
+          i++;
+        }
+        parts.push(`<ul data-cblist="1" style="list-style:none;padding:0;margin:2px 0;">${cbItems.join("")}</ul>`);
+      } else if (b.type === "bullet") {
+        parts.push(`<ul><li>${b.text || "<br>"}</li></ul>`);
+        i++;
+      } else if (b.type === "ordered") {
+        parts.push(`<ol><li>${b.text || "<br>"}</li></ol>`);
+        i++;
+      } else {
+        parts.push(`<p>${b.text || "<br>"}</p>`);
+        i++;
+      }
+    }
+    return parts.join("") || "<p><br></p>";
+  };
+
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    el.innerHTML = buildInitialHtml();
+    attachCbListeners(el);
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }, []);
 
   useEffect(() => {
     const fn = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") handleSave(); };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, [blocks, title]);
+  }, [title]);
 
-  const handleSave = () => onSave(note.id, title, blocks.filter((b) => b.text.trim() !== "" || b.type === "checkbox"));
+  // ── Listeners dos checkboxes ──────────────────────────────────────────────
+  const attachCbListeners = (el: HTMLElement) => {
+    el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => {
+      cb.addEventListener("change", () => handleCbChange(cb));
+    });
+  };
 
-  // Atualiza texto de um bloco
-  const updateText = useCallback((id: string, text: string) => {
-    setBlocks((p) => p.map((b) => b.id === id ? { ...b, text } : b));
-  }, []);
+  const handleCbChange = (cb: HTMLInputElement) => {
+    const li = cb.closest("li[data-cb]") as HTMLElement | null;
+    if (!li) return;
+    const span = li.querySelector("span") as HTMLElement | null;
+    if (cb.checked) {
+      li.style.textDecoration = "line-through";
+      li.style.color = "#9ca3af";
+      if (span) { span.style.textDecoration = "line-through"; span.style.color = "#9ca3af"; }
+    } else {
+      li.style.textDecoration = "";
+      li.style.color = "";
+      if (span) { span.style.textDecoration = ""; span.style.color = ""; }
+    }
+    // Reordena: pendentes primeiro, concluídos depois
+    const list = li.closest("ul[data-cblist]");
+    if (!list) return;
+    const items    = Array.from(list.querySelectorAll("li[data-cb]"));
+    const pending  = items.filter((it) => !(it.querySelector("input") as HTMLInputElement)?.checked);
+    const done     = items.filter((it) =>  (it.querySelector("input") as HTMLInputElement)?.checked);
+    [...pending, ...done].forEach((it) => list.appendChild(it));
+  };
 
-  // Aplica formato apenas ao bloco focado
-  const applyFmt = (fmt: Partial<TextFormat>) => {
-    if (!focusId) return;
-    setBlocks((p) => p.map((b) => b.id === focusId ? { ...b, format: { ...b.format, ...fmt } } : b));
+  // ── Salva / restaura seleção ──────────────────────────────────────────────
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) savedSelRef.current = sel.getRangeAt(0).cloneRange();
+  };
+
+  const restoreSelection = () => {
+    const sel = window.getSelection();
+    if (sel && savedSelRef.current) {
+      sel.removeAllRanges();
+      sel.addRange(savedSelRef.current);
+    }
+  };
+
+  // ── Detecta estado da toolbar ─────────────────────────────────────────────
+  const updateFmt = () => {
+    try {
+      setFmt({
+        bold:      document.queryCommandState("bold"),
+        italic:    document.queryCommandState("italic"),
+        underline: document.queryCommandState("underline"),
+        strike:    document.queryCommandState("strikeThrough"),
+        alignL:    document.queryCommandState("justifyLeft"),
+        alignC:    document.queryCommandState("justifyCenter"),
+        alignR:    document.queryCommandState("justifyRight"),
+        bullet:    document.queryCommandState("insertUnorderedList"),
+        ordered:   document.queryCommandState("insertOrderedList"),
+        color:     document.queryCommandValue("foreColor") || "#1f2937",
+      });
+    } catch {}
+  };
+
+  // ── Executa comando preservando seleção ───────────────────────────────────
+  const exec = (cmd: string, val?: string) => {
+    restoreSelection();
+    editorRef.current?.focus();
+    document.execCommand(cmd, false, val);
+    updateFmt();
+  };
+
+  // ── Tamanho de fonte via inline style (não via execCommand fontSize) ───────
+  // execCommand fontSize usa valores 1-7 e insere <font size="N">, que é instável.
+  // Em vez disso, envolvemos a seleção em um <span style="font-size:Xpx">.
+  const applyFontSize = (px: string) => {
+    restoreSelection();
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) {
+      // Sem seleção: aplica ao próximo texto via execCommand (fallback tolerável)
+      document.execCommand("fontSize", false, "3");
+      // Sobrescreve o size do <font> inserido com CSS
+      el.querySelectorAll("font[size='3']").forEach((f) => {
+        (f as HTMLElement).removeAttribute("size");
+        (f as HTMLElement).style.fontSize = px;
+      });
+    } else {
+      // Com seleção: envolve em span com font-size
+      const span = document.createElement("span");
+      span.style.fontSize = px;
+      try {
+        range.surroundContents(span);
+      } catch {
+        // surroundContents falha se a seleção cruza elementos — usa extractContents
+        const frag = range.extractContents();
+        span.appendChild(frag);
+        range.insertNode(span);
+      }
+      // Reposiciona seleção no span inserido
+      const newRange = document.createRange();
+      newRange.selectNodeContents(span);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+    setActiveSz(px);
     setOpenMenu(null);
+    updateFmt();
   };
 
-  // Muda tipo do bloco focado
-  const applyType = (type: BlockType) => {
-    if (!focusId) return;
-    setBlocks((p) => p.map((b) => b.id === focusId ? { ...b, type, checked: false } : b));
+  // ── Insere linha de checkbox no cursor ────────────────────────────────────
+  const insertCheckboxLine = () => {
+    restoreSelection();
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus();
+
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    range.collapse(true);
+
+    // Monta li
+    const li = document.createElement("li");
+    li.setAttribute("data-cb", "1");
+    li.style.cssText = "display:flex;align-items:center;list-style:none;padding:1px 0;";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.style.cssText = "accent-color:#7c3aed;width:14px;height:14px;margin-right:8px;flex-shrink:0;cursor:pointer;";
+    cb.addEventListener("change", () => handleCbChange(cb));
+
+    // Span editável — sem placeholder, sem zero-width space
+    const span = document.createElement("span");
+    span.contentEditable = "true";
+    span.style.cssText   = "flex:1;outline:none;min-width:4px;";
+
+    li.appendChild(cb);
+    li.appendChild(span);
+
+    // Verifica se cursor já está dentro de uma lista de checkboxes
+    const anchor  = range.startContainer;
+    const existingList = (
+      anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor as Element
+    )?.closest?.("ul[data-cblist]");
+
+    if (existingList) {
+      // Adiciona à lista existente após o li atual
+      const refLi = (
+        anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor as Element
+      )?.closest?.("li[data-cb]");
+      if (refLi) refLi.insertAdjacentElement("afterend", li);
+      else existingList.appendChild(li);
+    } else {
+      // Cria nova lista de checkboxes
+      const ul = document.createElement("ul");
+      ul.setAttribute("data-cblist", "1");
+      ul.style.cssText = "list-style:none;padding:0;margin:2px 0;";
+      ul.appendChild(li);
+      range.insertNode(ul);
+      // Parágrafo vazio para continuar escrevendo após a lista
+      const p = document.createElement("p");
+      p.innerHTML = "<br>";
+      ul.insertAdjacentElement("afterend", p);
+    }
+
+    // Foca no span vazio
+    const r = document.createRange();
+    r.setStart(span, 0);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    span.focus();
+    updateFmt();
   };
 
-  // Insere novo bloco após o atual
-  const insertAfter = useCallback((id: string) => {
-    setBlocks((prev) => {
-      const idx = prev.findIndex((b) => b.id === id);
-      const cur = prev[idx];
-      const nb  = mkBlock({ type: cur.type === "checkbox" ? "checkbox" : cur.type, format: { ...cur.format } });
-      const next = [...prev.slice(0, idx+1), nb, ...prev.slice(idx+1)];
-      setFocusId(nb.id);
-      return next;
-    });
-  }, []);
+  // ── Enter dentro de checkbox → novo item ──────────────────────────────────
+  const handleEditorKeydown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Enter") return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const anchor = sel.anchorNode;
+    const li = (
+      anchor?.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor as Element
+    )?.closest?.("li[data-cb]");
+    if (!li) return; // deixa o browser lidar com listas normais e parágrafos
 
-  // Remove bloco (se vazio e não único)
-  const removeBlock = useCallback((id: string) => {
-    setBlocks((prev) => {
-      if (prev.length <= 1) { return prev.map((b) => b.id === id ? { ...b, text: "" } : b); }
-      const idx   = prev.findIndex((b) => b.id === id);
-      const prevId = prev[idx-1]?.id ?? prev[idx+1]?.id;
-      setFocusId(prevId ?? null);
-      return prev.filter((b) => b.id !== id);
-    });
-  }, []);
+    e.preventDefault();
 
-  // Toggle checkbox — reordena pendentes antes de concluídos
-  const toggleCheck = useCallback((id: string) => {
-    setBlocks((prev) => {
-      const updated = prev.map((b) => b.id === id ? { ...b, checked: !b.checked } : b);
-      // Separa checkboxes dos outros blocos mantendo posição relativa
-      const result: Block[] = [];
-      const pending:  Block[] = [];
-      const done:     Block[] = [];
-      updated.forEach((b) => {
-        if (b.type !== "checkbox") result.push(b);
-        else if (!b.checked)       pending.push(b);
-        else                       done.push(b);
-      });
-      // Reconstrói: não-checkbox na posição original, checkboxes reordenados no final
-      const checkboxResult = [...pending, ...done];
-      const final: Block[] = [];
-      let ci = 0;
-      updated.forEach((b) => {
-        if (b.type !== "checkbox") final.push(b);
-        else final.push(checkboxResult[ci++]);
-      });
-      return final;
-    });
-  }, []);
+    const newLi   = document.createElement("li");
+    newLi.setAttribute("data-cb", "1");
+    newLi.style.cssText = "display:flex;align-items:center;list-style:none;padding:1px 0;";
 
-  const ToolBtn = ({ active, onClick, children, t }: { active?:boolean; onClick:()=>void; children:React.ReactNode; t?:string }) => (
-    <button onMouseDown={(e) => { e.preventDefault(); onClick(); }} title={t}
-      className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0 text-sm
-        ${active ? "bg-purple-100 text-purple-700 ring-1 ring-purple-200" : "hover:bg-gray-100 text-gray-500"}`}>
-      {children}
-    </button>
+    const newCb = document.createElement("input");
+    newCb.type  = "checkbox";
+    newCb.style.cssText = "accent-color:#7c3aed;width:14px;height:14px;margin-right:8px;flex-shrink:0;cursor:pointer;";
+    newCb.addEventListener("change", () => handleCbChange(newCb));
+
+    const newSpan = document.createElement("span");
+    newSpan.contentEditable = "true";
+    newSpan.style.cssText   = "flex:1;outline:none;min-width:4px;";
+
+    newLi.appendChild(newCb);
+    newLi.appendChild(newSpan);
+    li.insertAdjacentElement("afterend", newLi);
+
+    const r = document.createRange();
+    r.setStart(newSpan, 0);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    newSpan.focus();
+  };
+
+  const handleSave = () => {
+    const html = editorRef.current?.innerHTML ?? "";
+    onSave(note.id, title, [mkBlock({ text: html, type: "paragraph" })]);
+  };
+
+  const ToolBtn = ({ active, children, onClick, t }: {
+    active?: boolean; children: React.ReactNode; onClick: () => void; t?: string;
+  }) => (
+    <button title={t}
+      onMouseDown={(e) => { e.preventDefault(); saveSelection(); onClick(); }}
+      className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0
+        ${active ? "bg-purple-100 text-purple-700 ring-1 ring-purple-200" : "hover:bg-gray-100 text-gray-500"}`}
+    >{children}</button>
   );
 
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={handleSave}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <motion.div initial={{opacity:0,scale:0.95,y:12}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.95,y:12}}
-        transition={{type:"spring",stiffness:320,damping:28}} onClick={(e)=>e.stopPropagation()}
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col" style={{height:"80vh"}}>
-
+      <motion.div
+        initial={{opacity:0,scale:0.95,y:12}} animate={{opacity:1,scale:1,y:0}}
+        exit={{opacity:0,scale:0.95,y:12}} transition={{type:"spring",stiffness:320,damping:28}}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden"
+        style={{height:"80vh"}}
+      >
         {/* Header */}
         <div className="flex items-center gap-3 px-6 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
-          <input value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Título da nota"
-            className="flex-1 text-base font-bold text-gray-900 focus:outline-none placeholder-gray-300"/>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título da nota"
+            className="flex-1 text-base font-bold text-gray-900 focus:outline-none placeholder-gray-300" />
           <div className="flex items-center gap-1">
-            {folder&&cfg&&<span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.bg} ${cfg.text} mr-1`}>{folder.name}</span>}
-            <button onMouseDown={(e)=>{e.preventDefault();onDelete(note.id);}} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-red-50 text-gray-400 hover:text-red-400"><Trash2 className="size-4"/></button>
-            <button onClick={handleSave} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100 text-gray-400"><X className="size-5"/></button>
+            {folder && cfg && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.bg} ${cfg.text} mr-1`}>{folder.name}</span>}
+            <button onMouseDown={(e) => { e.preventDefault(); onDelete(note.id); }}
+              className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-red-50 text-gray-400 hover:text-red-400">
+              <Trash2 className="size-4" />
+            </button>
+            <button onClick={handleSave}
+              className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100 text-gray-400">
+              <X className="size-5" />
+            </button>
           </div>
         </div>
 
-        {/* Toolbar centralizada */}
+        {/* Toolbar */}
         <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-center gap-0.5 flex-wrap flex-shrink-0">
 
-          {/* Tamanho da fonte */}
+          {/* Tamanho da fonte — dropdown simples, sem bug */}
           <div className="relative">
-            <button onMouseDown={(e)=>{e.preventDefault();setOpenMenu(openMenu==="size"?null:"size");}}
-              className="flex items-center gap-1 px-2 h-8 hover:bg-gray-100 rounded-lg text-xs font-medium text-gray-600 flex-shrink-0">
-              <Type className="size-3.5"/><span className="w-8">{activeFmt.size}</span>
+            <button
+              onMouseDown={(e) => { e.preventDefault(); saveSelection(); setOpenMenu(openMenu === "size" ? null : "size"); }}
+              className="flex items-center gap-1 px-2 h-8 hover:bg-gray-100 rounded-lg text-xs font-medium text-gray-600 flex-shrink-0 min-w-[64px]"
+            >
+              <Type className="size-3.5 flex-shrink-0" />
+              <span>{activeSz}</span>
             </button>
             <AnimatePresence>
-              {openMenu==="size"&&(<>
-                <div className="fixed inset-0 z-10" onMouseDown={()=>setOpenMenu(null)}/>
-                <motion.div initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}}
-                  className="absolute top-10 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-gray-100 py-1 w-24 max-h-56 overflow-y-auto">
-                  {FONT_SIZES.map((s)=>(
-                    <button key={s} onMouseDown={(e)=>{e.preventDefault();applyFmt({size:s});}}
-                      className={`w-full px-3 py-1.5 text-xs text-left hover:bg-gray-50 ${activeFmt.size===s?"text-purple-600 font-bold":"text-gray-700"}`}>{s}</button>
-                  ))}
-                </motion.div>
-              </>)}
+              {openMenu === "size" && (
+                <>
+                  <div className="fixed inset-0 z-10" onMouseDown={() => setOpenMenu(null)} />
+                  <motion.div
+                    initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}}
+                    className="absolute top-10 left-0 z-20 bg-white rounded-xl shadow-xl border border-gray-100 py-1 w-24 max-h-56 overflow-y-auto"
+                  >
+                    {FONT_SIZES.map((s) => (
+                      <button key={s}
+                        onMouseDown={(e) => { e.preventDefault(); applyFontSize(s); }}
+                        className={`w-full px-3 py-1.5 text-xs text-left hover:bg-gray-50 ${activeSz === s ? "text-purple-600 font-bold" : "text-gray-700"}`}
+                      >{s}</button>
+                    ))}
+                  </motion.div>
+                </>
+              )}
             </AnimatePresence>
           </div>
 
-          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0"/>
-          <ToolBtn active={activeFmt.bold}      onClick={()=>applyFmt({bold:!activeFmt.bold})}           t="Negrito"><Bold className="size-3.5"/></ToolBtn>
-          <ToolBtn active={activeFmt.italic}    onClick={()=>applyFmt({italic:!activeFmt.italic})}       t="Itálico"><Italic className="size-3.5"/></ToolBtn>
-          <ToolBtn active={activeFmt.underline} onClick={()=>applyFmt({underline:!activeFmt.underline})} t="Sublinhado"><Underline className="size-3.5"/></ToolBtn>
-          <ToolBtn active={activeFmt.strike}    onClick={()=>applyFmt({strike:!activeFmt.strike})}       t="Riscado"><Strikethrough className="size-3.5"/></ToolBtn>
+          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
+          <ToolBtn active={fmt.bold}      onClick={() => exec("bold")}          t="Negrito"><Bold className="size-3.5" /></ToolBtn>
+          <ToolBtn active={fmt.italic}    onClick={() => exec("italic")}        t="Itálico"><Italic className="size-3.5" /></ToolBtn>
+          <ToolBtn active={fmt.underline} onClick={() => exec("underline")}     t="Sublinhado"><Underline className="size-3.5" /></ToolBtn>
+          <ToolBtn active={fmt.strike}    onClick={() => exec("strikeThrough")} t="Riscado"><Strikethrough className="size-3.5" /></ToolBtn>
 
-          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0"/>
-          <ToolBtn active={activeFmt.align==="left"}   onClick={()=>applyFmt({align:"left"})}   t="Esquerda"><AlignLeft className="size-3.5"/></ToolBtn>
-          <ToolBtn active={activeFmt.align==="center"} onClick={()=>applyFmt({align:"center"})} t="Centralizar"><AlignCenter className="size-3.5"/></ToolBtn>
-          <ToolBtn active={activeFmt.align==="right"}  onClick={()=>applyFmt({align:"right"})}  t="Direita"><AlignRight className="size-3.5"/></ToolBtn>
+          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
+          <ToolBtn active={fmt.alignL} onClick={() => exec("justifyLeft")}   t="Esquerda"><AlignLeft className="size-3.5" /></ToolBtn>
+          <ToolBtn active={fmt.alignC} onClick={() => exec("justifyCenter")} t="Centralizar"><AlignCenter className="size-3.5" /></ToolBtn>
+          <ToolBtn active={fmt.alignR} onClick={() => exec("justifyRight")}  t="Direita"><AlignRight className="size-3.5" /></ToolBtn>
 
-          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0"/>
-          <ToolBtn active={activeType==="bullet"}   onClick={()=>applyType(activeType==="bullet"  ?"paragraph":"bullet"  )} t="Lista"><List className="size-3.5"/></ToolBtn>
-          <ToolBtn active={activeType==="ordered"}  onClick={()=>applyType(activeType==="ordered" ?"paragraph":"ordered" )} t="Numerada"><ListOrdered className="size-3.5"/></ToolBtn>
-          <ToolBtn active={activeType==="checkbox"} onClick={()=>applyType(activeType==="checkbox"?"paragraph":"checkbox")} t="Checkbox"><CheckIcon className="size-3.5"/></ToolBtn>
+          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
+          <ToolBtn active={fmt.bullet}  onClick={() => exec("insertUnorderedList")} t="Lista"><List className="size-3.5" /></ToolBtn>
+          <ToolBtn active={fmt.ordered} onClick={() => exec("insertOrderedList")}   t="Numerada"><ListOrdered className="size-3.5" /></ToolBtn>
+          <ToolBtn active={false}       onClick={insertCheckboxLine}               t="Checkbox"><CheckIcon className="size-3.5" /></ToolBtn>
 
-          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0"/>
+          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
 
           {/* Cor da fonte */}
           <div className="relative">
-            <button onMouseDown={(e)=>{e.preventDefault();setOpenMenu(openMenu==="color"?null:"color");}}
+            <button onMouseDown={(e) => { e.preventDefault(); saveSelection(); setOpenMenu(openMenu === "color" ? null : "color"); }}
               className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg" title="Cor da fonte">
               <div className="flex flex-col items-center gap-0.5">
-                <Palette className="size-3.5 text-gray-500"/>
-                <div className="w-4 h-1 rounded-full" style={{backgroundColor:activeFmt.color}}/>
+                <Palette className="size-3.5 text-gray-500" />
+                <div className="w-4 h-1 rounded-full" style={{backgroundColor: fmt.color}} />
               </div>
             </button>
             <AnimatePresence>
-              {openMenu==="color"&&(<>
-                <div className="fixed inset-0 z-10" onMouseDown={()=>setOpenMenu(null)}/>
-                <motion.div initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}}
-                  className="absolute top-10 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-gray-100 p-3 w-44">
-                  <p className="text-xs text-gray-400 font-medium mb-2">Cor da fonte</p>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {FONT_COLORS.map((c)=>(
-                      <button key={c} onMouseDown={(e)=>{e.preventDefault();applyFmt({color:c});}}
-                        className={`w-7 h-7 rounded-full border-2 hover:scale-110 transition-transform ${activeFmt.color===c?"border-purple-500 scale-110":"border-gray-200"}`}
-                        style={{backgroundColor:c}}/>
-                    ))}
-                  </div>
-                </motion.div>
-              </>)}
+              {openMenu === "color" && (
+                <>
+                  <div className="fixed inset-0 z-10" onMouseDown={() => setOpenMenu(null)} />
+                  <motion.div initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}}
+                    className="absolute top-10 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-gray-100 p-3 w-44">
+                    <p className="text-xs text-gray-400 font-medium mb-2">Cor da fonte</p>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {FONT_COLORS.map((c) => (
+                        <button key={c} onMouseDown={(e) => { e.preventDefault(); exec("foreColor", c); setOpenMenu(null); }}
+                          className={`w-7 h-7 rounded-full border-2 hover:scale-110 transition-transform ${fmt.color === c ? "border-purple-500 scale-110" : "border-gray-200"}`}
+                          style={{backgroundColor: c}} />
+                      ))}
+                    </div>
+                  </motion.div>
+                </>
+              )}
             </AnimatePresence>
           </div>
 
           {/* Cor de fundo */}
           <div className="relative">
-            <button onMouseDown={(e)=>{e.preventDefault();setOpenMenu(openMenu==="bg"?null:"bg");}}
-              className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg" title="Fundo do texto">
+            <button onMouseDown={(e) => { e.preventDefault(); saveSelection(); setOpenMenu(openMenu === "bg" ? null : "bg"); }}
+              className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg" title="Fundo">
               <div className="flex flex-col items-center gap-0.5">
-                <Highlighter className="size-3.5 text-gray-500"/>
-                <div className="w-4 h-1 rounded-full border border-gray-200"
-                  style={{backgroundColor:activeFmt.bg==="transparent"?"#fff":activeFmt.bg}}/>
+                <Highlighter className="size-3.5 text-gray-500" />
+                <div className="w-4 h-1 rounded-full border border-gray-200 bg-yellow-200" />
               </div>
             </button>
             <AnimatePresence>
-              {openMenu==="bg"&&(<>
-                <div className="fixed inset-0 z-10" onMouseDown={()=>setOpenMenu(null)}/>
-                <motion.div initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}}
-                  className="absolute top-10 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-gray-100 p-3 w-44">
-                  <p className="text-xs text-gray-400 font-medium mb-2">Fundo do texto</p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {BG_COLORS.map((c)=>(
-                      <button key={c.v} onMouseDown={(e)=>{e.preventDefault();applyFmt({bg:c.v});}}
-                        className={`flex items-center justify-center h-8 rounded-lg border-2 hover:scale-105 transition-transform text-xs font-medium text-gray-500 ${activeFmt.bg===c.v?"border-purple-400":"border-gray-200"}`}
-                        style={{backgroundColor:c.v==="transparent"?"#fff":c.v}} title={c.l}>
-                        {c.v==="transparent"?"∅":""}
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              </>)}
+              {openMenu === "bg" && (
+                <>
+                  <div className="fixed inset-0 z-10" onMouseDown={() => setOpenMenu(null)} />
+                  <motion.div initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}}
+                    className="absolute top-10 left-1/2 -translate-x-1/2 z-20 bg-white rounded-xl shadow-xl border border-gray-100 p-3 w-44">
+                    <p className="text-xs text-gray-400 font-medium mb-2">Fundo do texto</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {BG_COLORS.map((c) => (
+                        <button key={c.v}
+                          onMouseDown={(e) => { e.preventDefault(); exec("hiliteColor", c.v === "transparent" ? "transparent" : c.v); setOpenMenu(null); }}
+                          className="flex items-center justify-center h-8 rounded-lg border-2 border-gray-200 hover:scale-105 transition-transform text-xs font-medium text-gray-500"
+                          style={{backgroundColor: c.v === "transparent" ? "#fff" : c.v}} title={c.l}>
+                          {c.v === "transparent" ? "∅" : ""}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                </>
+              )}
             </AnimatePresence>
           </div>
         </div>
 
-        {/* Área de blocos */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-0.5"
-          onClick={() => { if (blocks.length) setFocusId(blocks[blocks.length-1].id); }}>
-          {blocks.map((block, idx) => (
-            <BlockRow key={block.id} block={block} index={idx} isFocused={focusId===block.id}
-              onFocus={() => setFocusId(block.id)}
-              onChange={(t) => updateText(block.id, t)}
-              onEnter={() => insertAfter(block.id)}
-              onDelete={() => removeBlock(block.id)}
-              onToggle={() => toggleCheck(block.id)}
-            />
-          ))}
+        {/* Editor único — checkboxes, listas e texto convivem */}
+        <div className="flex-1 overflow-y-auto">
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            onKeyDown={handleEditorKeydown}
+            onKeyUp={updateFmt}
+            onMouseUp={updateFmt}
+            onSelect={updateFmt}
+            onInput={updateFmt}
+            className="min-h-full px-6 py-4 outline-none text-gray-800 leading-relaxed"
+            style={{ wordBreak: "break-word" }}
+          />
         </div>
 
         <div className="px-6 pb-5 flex-shrink-0">
-          <button onClick={handleSave} className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm transition-colors">Salvar nota</button>
+          <button onClick={handleSave}
+            className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm transition-colors">
+            Salvar nota
+          </button>
         </div>
       </motion.div>
     </motion.div>
-  );
-}
-
-// ─── BlockRow ─────────────────────────────────────────────────────────────────
-
-function BlockRow({ block, index, isFocused, onFocus, onChange, onEnter, onDelete, onToggle }: {
-  block:Block; index:number; isFocused:boolean;
-  onFocus:()=>void; onChange:(t:string)=>void;
-  onEnter:()=>void; onDelete:()=>void; onToggle:()=>void;
-}) {
-  const taRef = useRef<HTMLTextAreaElement>(null);
-
-  // Auto-resize: ajusta altura ao conteúdo
-  const resize = () => {
-    const el = taRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = el.scrollHeight + "px";
-  };
-
-  useEffect(() => { resize(); }, [block.text, block.format.size]);
-
-  useEffect(() => {
-    if (isFocused && taRef.current && document.activeElement !== taRef.current) {
-      taRef.current.focus();
-      const len = taRef.current.value.length;
-      taRef.current.setSelectionRange(len, len);
-    }
-  }, [isFocused]);
-
-  const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey)          { e.preventDefault(); onEnter(); }
-    else if (e.key === "Backspace" && !block.text) { e.preventDefault(); onDelete(); }
-  };
-
-  const { format: f, type, checked } = block;
-
-  const style: React.CSSProperties = {
-    fontWeight:      f.bold    ? "700"    : "400",
-    fontStyle:       f.italic  ? "italic" : "normal",
-    textDecoration: checked
-      ? "line-through"
-      : [f.underline && "underline", f.strike && "line-through"].filter(Boolean).join(" ") || "none",
-    textAlign:       f.align,
-    fontSize:        f.size,
-    color:           checked ? "#9ca3af" : f.color,
-    backgroundColor: f.bg === "transparent" ? undefined : f.bg,
-    resize:          "none",
-    overflow:        "hidden",
-    lineHeight:      "1.65",
-    wordBreak:       "break-word",
-    whiteSpace:      "pre-wrap",
-  };
-
-  return (
-    <div className={`flex items-start gap-2 py-0.5 px-1 rounded-lg ${isFocused ? "bg-gray-50/60" : ""}`}
-      onClick={(e) => { e.stopPropagation(); onFocus(); }}>
-
-      {/* Prefixo por tipo */}
-      {type === "bullet"   && <span className="text-gray-400 select-none w-4 flex-shrink-0 mt-1 leading-none" style={{fontSize:f.size}}>•</span>}
-      {type === "ordered"  && <span className="text-gray-400 select-none w-5 flex-shrink-0 mt-1 text-right leading-none" style={{fontSize:f.size}}>{index+1}.</span>}
-      {type === "checkbox" && (
-        <button type="button" onMouseDown={(e) => { e.preventDefault(); onToggle(); }}
-          className={`w-4 h-4 rounded border-2 flex-shrink-0 mt-1 flex items-center justify-center transition-colors ${
-            checked ? "bg-purple-600 border-purple-600" : "border-gray-400 hover:border-purple-400"}`}>
-          {checked && (
-            <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
-              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          )}
-        </button>
-      )}
-
-      {/* FIX: textarea em vez de input — quebra linha, seleção livre, sem placeholder */}
-      <textarea
-        ref={taRef}
-        value={block.text}
-        rows={1}
-        onChange={(e) => { onChange(e.target.value); resize(); }}
-        onKeyDown={onKey}
-        onFocus={onFocus}
-        placeholder=""
-        className="flex-1 bg-transparent focus:outline-none min-w-0 block"
-        style={style}
-      />
-    </div>
   );
 }
