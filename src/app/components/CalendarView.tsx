@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, X, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
 import {
   format,
+  parseISO,
   startOfMonth,
   endOfMonth,
   eachDayOfInterval,
@@ -13,50 +14,55 @@ import {
   subMonths,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Task } from "../types";
+import { taskStore } from "../store";
 
 interface CalendarEvent {
   id: string;
   date: Date;
   title: string;
-  type: "task" | "routine" | "goal";
+  type: "task";
   taskId?: string; // ID para navegação (tarefas)
 }
 
 const TYPE_CONFIG = {
-  task:    { label: "Tarefa",  bg: "bg-blue-500",    text: "text-white", dot: "bg-blue-500",    hover: "hover:bg-blue-600"    },
-  routine: { label: "Rotina",  bg: "bg-purple-500",  text: "text-white", dot: "bg-purple-500",  hover: "hover:bg-purple-600"  },
-  goal:    { label: "Meta",    bg: "bg-emerald-500", text: "text-white", dot: "bg-emerald-500", hover: "hover:bg-emerald-600" },
+  task: { label: "Tarefa", bg: "bg-blue-500", text: "text-white", dot: "bg-blue-500", hover: "hover:bg-blue-600" },
 };
 
 const WEEK_DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-const EVENTS: CalendarEvent[] = [
-  { id: "1",  date: new Date(2026, 2, 13), title: "Tomar medicação",    type: "routine" },
-  { id: "2",  date: new Date(2026, 2, 13), title: "Revisar projeto",    type: "task",    taskId: "1" },
-  { id: "3",  date: new Date(2026, 2, 14), title: "Exercícios",         type: "routine" },
-  { id: "4",  date: new Date(2026, 2, 15), title: "Estudar React",      type: "goal"    },
-  { id: "5",  date: new Date(2026, 2, 16), title: "Tomar medicação",    type: "routine" },
-  { id: "6",  date: new Date(2026, 2, 18), title: "Reunião importante", type: "task",    taskId: "2" },
-  { id: "7",  date: new Date(2026, 2, 18), title: "Estudar biologia",   type: "task",    taskId: "1" },
-  { id: "8",  date: new Date(2026, 2, 18), title: "Exercícios",         type: "routine" },
-  { id: "9",  date: new Date(2026, 2, 20), title: "Exercícios",         type: "routine" },
-  { id: "10", date: new Date(2026, 2, 22), title: "Ler livro",          type: "goal"    },
-  { id: "11", date: new Date(2026, 2, 25), title: "Comprar presente",   type: "task",    taskId: "2" },
-  { id: "12", date: new Date(2026, 2, 25), title: "Trabalho história",  type: "task",    taskId: "3" },
-];
 
 const MAX_VISIBLE = 2;
 
 export function CalendarView() {
   const navigate = useNavigate();
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setTasks(taskStore.getTasks());
+    const unsubscribe = taskStore.subscribe(() => {
+      setTasks(taskStore.getTasks());
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const events = useMemo<CalendarEvent[]>(() => {
+    return tasks.map((task) => ({
+      id: task.id,
+      date: task.scheduledDate ? parseISO(task.scheduledDate) : new Date(),
+      title: task.title,
+      type: "task",
+      taskId: task.id,
+    }));
+  }, [tasks]);
 
   const monthStart   = startOfMonth(currentMonth);
   const daysInMonth  = eachDayOfInterval({ start: monthStart, end: endOfMonth(currentMonth) });
   const startWeekday = monthStart.getDay();
 
-  const getEvents = (date: Date) => EVENTS.filter((e) => isSameDay(e.date, date));
+  const getEvents = (date: Date) => events.filter((e) => isSameDay(e.date, date));
   const selectedEvents = selectedDate ? getEvents(selectedDate) : [];
 
   const handleDayClick = (day: Date) => {
@@ -65,12 +71,8 @@ export function CalendarView() {
 
   const handleEventClick = (event: CalendarEvent, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (event.type === "task" && event.taskId) {
+    if (event.taskId) {
       navigate(`/focus/${event.taskId}`);
-    } else if (event.type === "routine") {
-      navigate("/routines");
-    } else if (event.type === "goal") {
-      navigate("/goals");
     }
   };
 
@@ -235,7 +237,7 @@ export function CalendarView() {
                     {selectedEvents.length > 0 ? (
                       selectedEvents.map((event, i) => {
                         const cfg = TYPE_CONFIG[event.type];
-                        const isNavigable = event.type === "task" || event.type === "routine" || event.type === "goal";
+                        const isNavigable = Boolean(event.taskId);
 
                         return (
                           <motion.button

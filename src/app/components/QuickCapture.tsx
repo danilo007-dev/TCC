@@ -22,17 +22,17 @@ export function QuickCapture() {
     }
   };
 
-  const handleProcess = () => {
+  const handleProcess = async () => {
     if (!input.trim()) return;
 
     setIsProcessing(true);
 
-    // Simulate AI processing
-    setTimeout(() => {
-      const suggestion = taskStore.breakdownTask(input);
+    try {
+      const suggestion = await taskStore.breakdownTaskWithAI(input);
       setAiSuggestion(suggestion);
+    } finally {
       setIsProcessing(false);
-    }, 800);
+    }
   };
 
   const handleAddTask = () => {
@@ -45,11 +45,12 @@ export function QuickCapture() {
       title: aiSuggestion.task,
       duration: parseInt(aiSuggestion.estimatedTime) || 15,
       estimatedTime: aiSuggestion.estimatedTime,
+      scheduledDate: new Date().toISOString().slice(0, 10),
       completed: false,
       progress: 0,
       color: randomColor,
       subtasks: aiSuggestion.subtasks.map((title, index) => ({
-        id: `${Date.now()}-${index}`,
+        id: crypto.randomUUID(),
         title,
         completed: false,
       })),

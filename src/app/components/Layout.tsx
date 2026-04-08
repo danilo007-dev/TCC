@@ -2,6 +2,48 @@ import { Outlet, useLocation, useNavigate } from "react-router";
 import { Brain, Home, MessageCircle, Plus, TrendingUp, Repeat, Target, Calendar } from "lucide-react";
 import { motion } from "motion/react";
 
+type NavItem = {
+  path: string;
+  icon: typeof Home;
+  label: string;
+  section: "main" | "organize" | "support";
+};
+
+const navItems: NavItem[] = [
+  { path: "/dashboard", icon: Home, label: "Hoje", section: "main" },
+  { path: "/capture", icon: Plus, label: "Adicionar", section: "main" },
+  { path: "/routines", icon: Repeat, label: "Rotinas", section: "organize" },
+  { path: "/goals", icon: Target, label: "Metas", section: "organize" },
+  { path: "/calendar", icon: Calendar, label: "Calendário", section: "organize" },
+  { path: "/chat", icon: MessageCircle, label: "Assistente", section: "support" },
+  { path: "/progress", icon: TrendingUp, label: "Progresso", section: "support" },
+];
+
+function NavButton({ item, isActive, onClick }: { item: NavItem; isActive: boolean; onClick: () => void }) {
+  const Icon = item.icon;
+  return (
+    <motion.button
+      key={item.path}
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative ${
+        isActive ? "bg-purple-100 text-purple-700" : "text-gray-600 hover:bg-gray-100"
+      }`}
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+    >
+      {isActive && (
+        <motion.div
+          layoutId="activeSidebar"
+          className="absolute left-0 top-0 bottom-0 w-1 bg-purple-600 rounded-r"
+          transition={{ type: "spring", duration: 0.5 }}
+        />
+      )}
+      <Icon className="size-5" />
+      <span className="font-medium">{item.label}</span>
+    </motion.button>
+  );
+}
+
 export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -9,42 +51,6 @@ export function Layout() {
   if (location.pathname === "/") {
     return <Outlet />;
   }
-
-  const navItems = [
-    { path: "/dashboard", icon: Home, label: "Hoje", section: "main" },
-    { path: "/capture", icon: Plus, label: "Adicionar", section: "main" },
-    { path: "/routines", icon: Repeat, label: "Rotinas", section: "organize" },
-    { path: "/goals", icon: Target, label: "Metas", section: "organize" },
-    { path: "/calendar", icon: Calendar, label: "Calendário", section: "organize" },
-    { path: "/chat", icon: MessageCircle, label: "Assistente", section: "support" },
-    { path: "/progress", icon: TrendingUp, label: "Progresso", section: "support" },
-  ];
-
-  const NavButton = ({ item }: { item: typeof navItems[0] }) => {
-    const Icon = item.icon;
-    const isActive = location.pathname === item.path;
-    return (
-      <motion.button
-        key={item.path}
-        onClick={() => navigate(item.path)}
-        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative ${
-          isActive ? "bg-purple-100 text-purple-700" : "text-gray-600 hover:bg-gray-100"
-        }`}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        {isActive && (
-          <motion.div
-            layoutId="activeSidebar"
-            className="absolute left-0 top-0 bottom-0 w-1 bg-purple-600 rounded-r"
-            transition={{ type: "spring", duration: 0.5 }}
-          />
-        )}
-        <Icon className="size-5" />
-        <span className="font-medium">{item.label}</span>
-      </motion.button>
-    );
-  };
 
   return (
     /* 
@@ -64,7 +70,7 @@ export function Layout() {
               <Brain className="size-6 text-purple-600" />
             </div>
             <div>
-              <span className="font-semibold text-gray-900 block">Focus Flow</span>
+              <span className="font-semibold text-gray-900 block">FocusGrid</span>
               <span className="text-xs text-gray-500">Organize com foco</span>
             </div>
           </div>
@@ -77,7 +83,12 @@ export function Layout() {
               Principal
             </p>
             {navItems.filter((i) => i.section === "main").map((item) => (
-              <NavButton key={item.path} item={item} />
+              <NavButton
+                key={item.path}
+                item={item}
+                isActive={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
+              />
             ))}
           </div>
 
@@ -86,7 +97,12 @@ export function Layout() {
               Organizar
             </p>
             {navItems.filter((i) => i.section === "organize").map((item) => (
-              <NavButton key={item.path} item={item} />
+              <NavButton
+                key={item.path}
+                item={item}
+                isActive={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
+              />
             ))}
           </div>
 
@@ -95,7 +111,12 @@ export function Layout() {
               Acompanhar
             </p>
             {navItems.filter((i) => i.section === "support").map((item) => (
-              <NavButton key={item.path} item={item} />
+              <NavButton
+                key={item.path}
+                item={item}
+                isActive={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
+              />
             ))}
           </div>
         </nav>

@@ -3,7 +3,9 @@ export interface Task {
   title: string;
   duration: number; // in minutes
   estimatedTime?: string;
+  scheduledDate?: string;
   completed: boolean;
+  completedAt?: string;
   subtasks: Subtask[];
   progress: number;
   timeOfDay?: string;
@@ -18,7 +20,34 @@ export interface Subtask {
 
 export interface DayProgress {
   date: string;
+  label: string;
   tasksCompleted: number;
-  totalTasks: number;
-  streak: number;
+  isToday?: boolean;
+}
+
+export interface Goal {
+  id: string;
+  title: string;
+  description: string;
+  progress: number;
+  type: "short" | "long";
+  steps: string[];
+  completedSteps: number;
+}
+
+export interface RoutineStep {
+  id: string;
+  title: string;
+  duration?: string;
+  completed: boolean;
+}
+
+export interface Routine {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  colorKey: string;
+  isFavorite: boolean;
+  steps: RoutineStep[];
 }

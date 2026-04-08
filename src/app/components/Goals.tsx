@@ -1,16 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Target, Plus, Trash2, Check, ChevronRight, X, Flag, Rocket } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-
-interface Goal {
-  id: string;
-  title: string;
-  description: string;
-  progress: number;
-  type: "short" | "long";
-  steps: string[];
-  completedSteps: number;
-}
+import { Goal } from "../types";
+import { goalsRepository } from "../repositories/goalsRepository";
 
 const INITIAL_GOALS: Goal[] = [
   {
@@ -46,11 +38,43 @@ export function Goals() {
   const [goals, setGoals]       = useState<Goal[]>(INITIAL_GOALS);
   const [showModal, setShowModal] = useState(false);
 
-  const deleteGoal = (id: string) => setGoals((prev) => prev.filter((g) => g.id !== id));
+  useEffect(() => {
+    if (!goalsRepository.isEnabled()) return;
+
+    const hydrate = async () => {
+      try {
+        const remoteGoals = await goalsRepository.fetchGoals();
+        if (remoteGoals.length > 0) {
+          setGoals(remoteGoals);
+          return;
+        }
+
+        await Promise.all(INITIAL_GOALS.map((goal) => goalsRepository.upsertGoal(goal)));
+      } catch (error) {
+        console.error("Failed to hydrate goals:", error);
+      }
+    };
+
+    void hydrate();
+  }, []);
+
+  const deleteGoal = (id: string) => {
+    setGoals((prev) => prev.filter((g) => g.id !== id));
+    if (goalsRepository.isEnabled()) {
+      void goalsRepository.deleteGoal(id).catch((error) => {
+        console.error("Failed to delete goal:", error);
+      });
+    }
+  };
 
   const addGoal = (goal: Goal) => {
     setGoals((prev) => [...prev, goal]);
     setShowModal(false);
+    if (goalsRepository.isEnabled()) {
+      void goalsRepository.upsertGoal(goal).catch((error) => {
+        console.error("Failed to sync goal:", error);
+      });
+    }
   };
 
   const shortGoals = goals.filter((g) => g.type === "short");

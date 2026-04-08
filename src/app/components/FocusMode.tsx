@@ -41,6 +41,19 @@ export function FocusMode() {
     return () => clearInterval(interval);
   }, [isTimerRunning, timeRemaining]);
 
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    if (isDeepFocus) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = previousOverflow;
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isDeepFocus]);
+
   const handleToggleSubtask = (subtaskId: string) => {
     if (!taskId) return;
     taskStore.toggleSubtask(taskId, subtaskId);
@@ -58,8 +71,8 @@ export function FocusMode() {
   };
 
   const handleStartFocus = () => { setFocusStarted(true); setIsTimerRunning(true); };
-  const handleEnterDeepFocus = () => { setIsDeepFocus(true); document.body.style.overflow = "hidden"; };
-  const handleExitDeepFocus = () => { setIsDeepFocus(false); document.body.style.overflow = ""; };
+  const handleEnterDeepFocus = () => { setIsDeepFocus(true); };
+  const handleExitDeepFocus = () => { setIsDeepFocus(false); };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

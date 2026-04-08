@@ -2,18 +2,26 @@ import { useEffect, useState } from "react";
 import { taskStore } from "../store";
 import { CheckCircle2, TrendingUp, Calendar, Zap } from "lucide-react";
 import { motion } from "motion/react";
+import { DayProgress } from "../types";
 
 export function Progress() {
   const [completedCount, setCompletedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [weekData, setWeekData] = useState<DayProgress[]>([]);
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
-    setCompletedCount(taskStore.getCompletedTasksCount());
-    setTotalCount(taskStore.getTotalTasksCount());
-
-    const unsubscribe = taskStore.subscribe(() => {
+    const sync = () => {
       setCompletedCount(taskStore.getCompletedTasksCount());
       setTotalCount(taskStore.getTotalTasksCount());
+      setWeekData(taskStore.getWeeklyProgress());
+      setStreak(taskStore.getCurrentStreak());
+    };
+
+    sync();
+
+    const unsubscribe = taskStore.subscribe(() => {
+      sync();
     });
 
     return unsubscribe;
@@ -22,19 +30,7 @@ export function Progress() {
   const completionRate =
     totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  // Mock weekly data
-  const weekData = [
-    { day: "Seg", completed: 3, label: "S" },
-    { day: "Ter", completed: 2, label: "T" },
-    { day: "Qua", completed: 4, label: "Q" },
-    { day: "Qui", completed: 3, label: "Q" },
-    { day: "Sex", completed: completedCount, label: "S", isToday: true },
-    { day: "Sáb", completed: 0, label: "S" },
-    { day: "Dom", completed: 0, label: "D" },
-  ];
-
-  const maxCompleted = Math.max(...weekData.map((d) => d.completed), 1);
-  const streak = 5; // Mock streak
+  const maxCompleted = Math.max(...weekData.map((d) => d.tasksCompleted), 1);
 
   return (
     <div className="space-y-6">
@@ -111,10 +107,10 @@ export function Progress() {
 
         <div className="flex items-end justify-between gap-2 h-32">
           {weekData.map((day, index) => {
-            const height = (day.completed / maxCompleted) * 100;
+            const height = (day.tasksCompleted / maxCompleted) * 100;
             
             return (
-              <div key={day.day} className="flex-1 flex flex-col items-center">
+              <div key={day.date} className="flex-1 flex flex-col items-center">
                 <div className="w-full flex items-end justify-center h-24 mb-2">
                   <motion.div
                     initial={{ height: 0 }}
@@ -128,9 +124,9 @@ export function Progress() {
                   />
                 </div>
                 <p className="text-xs text-gray-600">{day.label}</p>
-                {day.completed > 0 && (
+                {day.tasksCompleted > 0 && (
                   <p className="text-xs font-semibold text-gray-900">
-                    {day.completed}
+                    {day.tasksCompleted}
                   </p>
                 )}
               </div>

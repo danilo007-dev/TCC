@@ -10,25 +10,8 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { HelpfulHint } from "./HelpfulHint";
 import confetti from "canvas-confetti";
-
-// ─── Tipos ────────────────────────────────────────────────────────────────────
-
-interface RoutineStep {
-  id: string;
-  title: string;
-  duration?: string;
-  completed: boolean;
-}
-
-interface Routine {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  colorKey: string;   // chave da cor escolhida
-  isFavorite: boolean;
-  steps: RoutineStep[];
-}
+import { Routine } from "../types";
+import { routinesRepository } from "../repositories/routinesRepository";
 
 // ─── Paleta de cores ──────────────────────────────────────────────────────────
 
@@ -144,11 +127,43 @@ export function Routines() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal]   = useState(false);
 
+  useEffect(() => {
+    if (!routinesRepository.isEnabled()) return;
+
+    const hydrate = async () => {
+      try {
+        const remoteRoutines = await routinesRepository.fetchRoutines();
+        if (remoteRoutines.length > 0) {
+          setRoutines(remoteRoutines);
+          return;
+        }
+
+        await Promise.all(INITIAL_ROUTINES.map((routine) => routinesRepository.upsertRoutine(routine)));
+      } catch (error) {
+        console.error("Failed to hydrate routines:", error);
+      }
+    };
+
+    void hydrate();
+  }, []);
+
+  const syncRoutine = (routine: Routine) => {
+    if (!routinesRepository.isEnabled()) return;
+    void routinesRepository.upsertRoutine(routine).catch((error) => {
+      console.error("Failed to sync routine:", error);
+    });
+  };
+
   const selectedRoutine = routines.find((r) => r.id === selectedId) ?? null;
 
   const toggleFavorite = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setRoutines((prev) => prev.map((r) => r.id === id ? { ...r, isFavorite: !r.isFavorite } : r));
+    setRoutines((prev) => {
+      const next = prev.map((r) => r.id === id ? { ...r, isFavorite: !r.isFavorite } : r);
+      const updated = next.find((r) => r.id === id);
+      if (updated) syncRoutine(updated);
+      return next;
+    });
   };
 
   const toggleStep = (routineId: string, stepId: string) => {
@@ -162,7 +177,9 @@ export function Routines() {
             colors: ["#7c3aed", "#a855f7", "#ec4899", "#22c55e"],
           }), 100);
         }
-        return { ...r, steps: updated };
+        const nextRoutine = { ...r, steps: updated };
+        syncRoutine(nextRoutine);
+        return nextRoutine;
       })
     );
   };
@@ -170,7 +187,13 @@ export function Routines() {
   const resetRoutine = (routineId: string) => {
     setRoutines((prev) =>
       prev.map((r) =>
-        r.id === routineId ? { ...r, steps: r.steps.map((s) => ({ ...s, completed: false })) } : r
+        r.id === routineId
+          ? (() => {
+              const nextRoutine = { ...r, steps: r.steps.map((s) => ({ ...s, completed: false })) };
+              syncRoutine(nextRoutine);
+              return nextRoutine;
+            })()
+          : r
       )
     );
   };
@@ -178,6 +201,7 @@ export function Routines() {
   const addRoutine = (routine: Routine) => {
     setRoutines((prev) => [...prev, routine]);
     setShowModal(false);
+    syncRoutine(routine);
   };
 
   const favorites = routines.filter((r) => r.isFavorite);

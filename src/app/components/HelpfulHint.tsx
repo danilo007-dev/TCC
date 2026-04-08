@@ -3,13 +3,11 @@ import { motion } from "motion/react";
 
 interface HelpfulHintProps {
   children?: React.ReactNode;
-  message?: string;
   title?: string;
   className?: string;
 }
 
-export function HelpfulHint({ children, message, title, className = "" }: HelpfulHintProps) {
-  const content = children ?? message;
+export function HelpfulHint({ children, title, className = "" }: HelpfulHintProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -22,7 +20,7 @@ export function HelpfulHint({ children, message, title, className = "" }: Helpfu
         </div>
         <div className="flex-1">
           {title && <p className="text-sm font-semibold text-blue-900 mb-0.5">{title}</p>}
-          <p className="text-sm text-blue-800">{content}</p>
+          <p className="text-sm text-blue-800">{children}</p>
         </div>
       </div>
     </motion.div>
