@@ -49,7 +49,7 @@ export function QuickCapture() {
       completed: false,
       progress: 0,
       color: randomColor,
-      subtasks: aiSuggestion.subtasks.map((title, index) => ({
+      subtasks: aiSuggestion.subtasks.map((title) => ({
         id: crypto.randomUUID(),
         title,
         completed: false,

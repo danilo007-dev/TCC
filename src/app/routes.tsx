@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router";
 import { Layout } from "./components/Layout";
+import { Login } from "./components/Login";
 import { Onboarding } from "./components/Onboarding";
 import { Dashboard } from "./components/Dashboard";
 import { QuickCapture } from "./components/QuickCapture";
@@ -12,6 +13,7 @@ import { CalendarView } from "./components/CalendarView";
 import { NotFound } from "./components/NotFound";
 
 export const router = createBrowserRouter([
+  { path: "/login", Component: Login },
   {
     path: "/",
     Component: Layout,

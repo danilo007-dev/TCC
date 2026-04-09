@@ -10,6 +10,7 @@ export interface Task {
   progress: number;
   timeOfDay?: string;
   color?: string;
+  userId?: string;
 }
 
 export interface Subtask {
@@ -33,6 +34,8 @@ export interface Goal {
   type: "short" | "long";
   steps: string[];
   completedSteps: number;
+  scheduledDate?: string;
+  userId?: string;
 }
 
 export interface RoutineStep {
@@ -50,4 +53,6 @@ export interface Routine {
   colorKey: string;
   isFavorite: boolean;
   steps: RoutineStep[];
+  scheduledDate?: string;
+  userId?: string;
 }

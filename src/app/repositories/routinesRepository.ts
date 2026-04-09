@@ -8,6 +8,7 @@ type RoutineRow = {
   icon: string;
   color_key: string;
   is_favorite: boolean;
+  scheduled_date: string | null;
 };
 
 type RoutineStepRow = {
@@ -29,6 +30,7 @@ function mapRowToRoutine(row: RoutineWithStepsRow): Routine {
     icon: row.icon,
     colorKey: row.color_key,
     isFavorite: row.is_favorite,
+    scheduledDate: row.scheduled_date ?? undefined,
     steps: (row.routine_steps ?? [])
       .sort((a, b) => a.position - b.position)
       .map((step) => ({
@@ -45,12 +47,13 @@ export const routinesRepository = {
     return isSupabaseConfigured && Boolean(supabase);
   },
 
-  async fetchRoutines(): Promise<Routine[]> {
+  async fetchRoutines(userId: string): Promise<Routine[]> {
     if (!supabase) return [];
 
     const { data, error } = await supabase
       .from("routines")
-      .select("id,title,description,icon,color_key,is_favorite,routine_steps(id,routine_id,title,duration,completed,position)")
+      .select("id,title,description,icon,color_key,is_favorite,scheduled_date,routine_steps(id,routine_id,title,duration,completed,position)")
+      .eq("user_id", userId)
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -60,8 +63,8 @@ export const routinesRepository = {
     return (data as RoutineWithStepsRow[]).map(mapRowToRoutine);
   },
 
-  async upsertRoutine(routine: Routine): Promise<void> {
-    if (!supabase) return;
+  async upsertRoutine(routine: Routine, userId: string): Promise<void> {
+    if (!supabase || !userId) return;
 
     const { error: routineError } = await supabase.from("routines").upsert(
       {
@@ -71,6 +74,8 @@ export const routinesRepository = {
         icon: routine.icon,
         color_key: routine.colorKey,
         is_favorite: routine.isFavorite,
+        scheduled_date: routine.scheduledDate ?? null,
+        user_id: userId,
       },
       { onConflict: "id" }
     );

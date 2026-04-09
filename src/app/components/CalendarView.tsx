@@ -14,19 +14,24 @@ import {
   subMonths,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Task } from "../types";
+import { Goal, Routine, Task } from "../types";
+import { goalsRepository } from "../repositories/goalsRepository";
+import { routinesRepository } from "../repositories/routinesRepository";
 import { taskStore } from "../store";
+import { useAuth } from "./AuthProvider";
 
 interface CalendarEvent {
   id: string;
   date: Date;
   title: string;
-  type: "task";
-  taskId?: string; // ID para navegação (tarefas)
+  type: "task" | "goal" | "routine";
+  path: string;
 }
 
 const TYPE_CONFIG = {
   task: { label: "Tarefa", bg: "bg-blue-500", text: "text-white", dot: "bg-blue-500", hover: "hover:bg-blue-600" },
+  goal: { label: "Meta", bg: "bg-green-500", text: "text-white", dot: "bg-green-500", hover: "hover:bg-green-600" },
+  routine: { label: "Rotina", bg: "bg-purple-500", text: "text-white", dot: "bg-purple-500", hover: "hover:bg-purple-600" },
 };
 
 const WEEK_DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -36,8 +41,11 @@ const MAX_VISIBLE = 2;
 export function CalendarView() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [routines, setRoutines] = useState<Routine[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     setTasks(taskStore.getTasks());
@@ -48,15 +56,66 @@ export function CalendarView() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    if (!user || (!goalsRepository.isEnabled() && !routinesRepository.isEnabled())) {
+      setGoals([]);
+      setRoutines([]);
+      return;
+    }
+
+    const hydrate = async () => {
+      try {
+        if (goalsRepository.isEnabled()) {
+          const remoteGoals = await goalsRepository.fetchGoals(user.id);
+          setGoals(remoteGoals);
+        }
+        if (routinesRepository.isEnabled()) {
+          const remoteRoutines = await routinesRepository.fetchRoutines(user.id);
+          setRoutines(remoteRoutines);
+        }
+      } catch (error) {
+        console.error("Failed to hydrate calendar events:", error);
+      }
+    };
+
+    void hydrate();
+  }, [user]);
+
   const events = useMemo<CalendarEvent[]>(() => {
-    return tasks.map((task) => ({
-      id: task.id,
-      date: task.scheduledDate ? parseISO(task.scheduledDate) : new Date(),
-      title: task.title,
-      type: "task",
-      taskId: task.id,
-    }));
-  }, [tasks]);
+    const taskEvents = tasks
+      .filter((task) => task.scheduledDate)
+      .map((task) => ({
+        id: `task-${task.id}`,
+        date: parseISO(task.scheduledDate!),
+        title: task.title,
+        type: "task" as const,
+        path: `/focus/${task.id}`,
+      }));
+
+    const goalEvents = goals
+      .filter((goal) => goal.scheduledDate)
+      .map((goal) => ({
+        id: `goal-${goal.id}`,
+        date: parseISO(goal.scheduledDate!),
+        title: goal.title,
+        type: "goal" as const,
+        path: "/goals",
+      }));
+
+    const routineEvents = routines
+      .filter((routine) => routine.scheduledDate)
+      .map((routine) => ({
+        id: `routine-${routine.id}`,
+        date: parseISO(routine.scheduledDate!),
+        title: routine.title,
+        type: "routine" as const,
+        path: "/routines",
+      }));
+
+    return [...taskEvents, ...goalEvents, ...routineEvents];
+  }, [tasks, goals, routines]);
+
+  const hasEvents = events.length > 0;
 
   const monthStart   = startOfMonth(currentMonth);
   const daysInMonth  = eachDayOfInterval({ start: monthStart, end: endOfMonth(currentMonth) });
@@ -71,17 +130,11 @@ export function CalendarView() {
 
   const handleEventClick = (event: CalendarEvent, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (event.taskId) {
-      navigate(`/focus/${event.taskId}`);
-    }
+    navigate(event.path);
   };
 
   return (
-    /*
-      FIX altura: usa h-[calc(100vh-88px)] para preencher toda a área disponível
-      descontando o header do Layout (py-6 = 24px top + 24px bottom + margem = ~88px)
-    */
-    <div className="flex flex-col -mx-8 -my-6 px-8 py-6" style={{ height: "calc(100vh - 0px)" }}>
+    <div className="flex flex-col -mx-8 -my-6 px-8 py-6 min-h-[calc(100vh-112px)]">
 
       {/* HEADER */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
@@ -110,6 +163,12 @@ export function CalendarView() {
           </button>
         </div>
       </div>
+
+      {!hasEvents && (
+        <div className="mb-4 rounded-3xl border border-dashed border-gray-200 bg-white/80 p-4 text-sm text-gray-500">
+          Nenhuma tarefa agendada para este mês. Use “Adicionar” ou “Assistente” para transformar o que está na sua cabeça em foco.
+        </div>
+      )}
 
       {/* BODY — ocupa todo o espaço restante */}
       <div className="flex gap-4 flex-1 min-h-0 pb-6">
@@ -237,7 +296,7 @@ export function CalendarView() {
                     {selectedEvents.length > 0 ? (
                       selectedEvents.map((event, i) => {
                         const cfg = TYPE_CONFIG[event.type];
-                        const isNavigable = Boolean(event.taskId);
+                        const isNavigable = Boolean(event.path);
 
                         return (
                           <motion.button

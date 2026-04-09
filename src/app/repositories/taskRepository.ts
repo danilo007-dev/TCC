@@ -1,6 +1,14 @@
 import { Task } from "../types";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
+type SubtaskRow = {
+  id: string;
+  task_id: string;
+  title: string;
+  completed: boolean;
+  position: number;
+};
+
 type TaskRow = {
   id: string;
   title: string;
@@ -12,19 +20,10 @@ type TaskRow = {
   progress: number;
   time_of_day: string | null;
   color: string | null;
+  subtasks: SubtaskRow[] | null;
 };
 
-type SubtaskRow = {
-  id: string;
-  task_id: string;
-  title: string;
-  completed: boolean;
-  position: number;
-};
-
-type TaskWithSubtasksRow = TaskRow & { subtasks: SubtaskRow[] | null };
-
-function mapRowToTask(row: TaskWithSubtasksRow): Task {
+function mapRowToTask(row: TaskRow): Task {
   return {
     id: row.id,
     title: row.title,
@@ -51,7 +50,7 @@ export const taskRepository = {
     return isSupabaseConfigured && Boolean(supabase);
   },
 
-  async fetchTasks(): Promise<Task[]> {
+  async fetchTasks(userId: string): Promise<Task[]> {
     if (!supabase) return [];
 
     const { data, error } = await supabase
@@ -59,17 +58,18 @@ export const taskRepository = {
       .select(
         "id,title,duration,estimated_time,scheduled_date,completed,completed_at,progress,time_of_day,color,subtasks(id,task_id,title,completed,position)"
       )
+      .eq("user_id", userId)
       .order("created_at", { ascending: true });
 
     if (error) {
       throw new Error(error.message);
     }
 
-    return (data as TaskWithSubtasksRow[]).map(mapRowToTask);
+    return (data as TaskRow[]).map(mapRowToTask);
   },
 
-  async upsertTask(task: Task): Promise<void> {
-    if (!supabase) return;
+  async upsertTask(task: Task, userId: string): Promise<void> {
+    if (!supabase || !userId) return;
 
     const { error: taskError } = await supabase.from("tasks").upsert(
       {
@@ -83,6 +83,7 @@ export const taskRepository = {
         progress: task.progress,
         time_of_day: task.timeOfDay ?? null,
         color: task.color ?? null,
+        user_id: userId,
       },
       { onConflict: "id" }
     );

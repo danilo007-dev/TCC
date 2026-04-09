@@ -17,6 +17,25 @@ export default defineConfig({
     },
   },
 
+  build: {
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('lucide-react') || id.includes('motion') || id.includes('react-router')) {
+              return 'vendor-ui';
+            }
+            if (id.includes('date-fns') || id.includes('canvas-confetti')) {
+              return 'vendor-utils';
+            }
+            return 'vendor';
+          }
+        },
+      },
+    },
+  },
+
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })

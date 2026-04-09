@@ -8,6 +8,7 @@ type GoalRow = {
   progress: number;
   type: "short" | "long";
   completed_steps: number;
+  scheduled_date: string | null;
 };
 
 type GoalStepRow = {
@@ -27,6 +28,7 @@ function mapRowToGoal(row: GoalWithStepsRow): Goal {
     progress: row.progress,
     type: row.type,
     completedSteps: row.completed_steps,
+    scheduledDate: row.scheduled_date ?? undefined,
     steps: (row.goal_steps ?? [])
       .sort((a, b) => a.position - b.position)
       .map((step) => step.title),
@@ -38,12 +40,13 @@ export const goalsRepository = {
     return isSupabaseConfigured && Boolean(supabase);
   },
 
-  async fetchGoals(): Promise<Goal[]> {
+  async fetchGoals(userId: string): Promise<Goal[]> {
     if (!supabase) return [];
 
     const { data, error } = await supabase
       .from("goals")
-      .select("id,title,description,progress,type,completed_steps,goal_steps(id,goal_id,title,position)")
+      .select("id,title,description,progress,type,completed_steps,scheduled_date,goal_steps(id,goal_id,title,position)")
+      .eq("user_id", userId)
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -53,8 +56,8 @@ export const goalsRepository = {
     return (data as GoalWithStepsRow[]).map(mapRowToGoal);
   },
 
-  async upsertGoal(goal: Goal): Promise<void> {
-    if (!supabase) return;
+  async upsertGoal(goal: Goal, userId: string): Promise<void> {
+    if (!supabase || !userId) return;
 
     const { error: goalError } = await supabase.from("goals").upsert(
       {
@@ -64,6 +67,8 @@ export const goalsRepository = {
         progress: goal.progress,
         type: goal.type,
         completed_steps: goal.completedSteps,
+        scheduled_date: goal.scheduledDate ?? null,
+        user_id: userId,
       },
       { onConflict: "id" }
     );

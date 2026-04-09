@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { Target, Plus, Trash2, Check, ChevronRight, X, Flag, Rocket } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Goal } from "../types";
 import { goalsRepository } from "../repositories/goalsRepository";
+import { useAuth } from "./AuthProvider";
 
 const INITIAL_GOALS: Goal[] = [
   {
@@ -11,6 +14,7 @@ const INITIAL_GOALS: Goal[] = [
     description: "Finalizar todos os módulos e projetos práticos",
     progress: 60,
     type: "short",
+    scheduledDate: new Date().toISOString().slice(0, 10),
     steps: ["Módulo 1", "Módulo 2", "Módulo 3", "Projeto Final"],
     completedSteps: 2,
   },
@@ -20,6 +24,7 @@ const INITIAL_GOALS: Goal[] = [
     description: "Um livro por mês",
     progress: 25,
     type: "long",
+    scheduledDate: new Date(new Date().setDate(new Date().getDate() + 2)).toISOString().slice(0, 10),
     steps: ["Livro 1", "Livro 2", "Livro 3", "...12 livros"],
     completedSteps: 3,
   },
@@ -35,28 +40,37 @@ const INITIAL_GOALS: Goal[] = [
 ];
 
 export function Goals() {
-  const [goals, setGoals]       = useState<Goal[]>(INITIAL_GOALS);
+  const [goals, setGoals] = useState<Goal[]>(INITIAL_GOALS);
   const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const { user } = useAuth();
 
   useEffect(() => {
-    if (!goalsRepository.isEnabled()) return;
+    if (!goalsRepository.isEnabled() || !user) return;
 
     const hydrate = async () => {
+      setLoading(true);
+      setError("");
+
       try {
-        const remoteGoals = await goalsRepository.fetchGoals();
+        const remoteGoals = await goalsRepository.fetchGoals(user.id);
         if (remoteGoals.length > 0) {
           setGoals(remoteGoals);
           return;
         }
 
-        await Promise.all(INITIAL_GOALS.map((goal) => goalsRepository.upsertGoal(goal)));
+        await Promise.all(INITIAL_GOALS.map((goal) => goalsRepository.upsertGoal(goal, user.id)));
       } catch (error) {
         console.error("Failed to hydrate goals:", error);
+        setError("Não foi possível carregar suas metas. Verifique a conexão e tente novamente.");
+      } finally {
+        setLoading(false);
       }
     };
 
     void hydrate();
-  }, []);
+  }, [user]);
 
   const deleteGoal = (id: string) => {
     setGoals((prev) => prev.filter((g) => g.id !== id));
@@ -68,10 +82,11 @@ export function Goals() {
   };
 
   const addGoal = (goal: Goal) => {
-    setGoals((prev) => [...prev, goal]);
+    const goalWithUser = { ...goal, userId: user?.id };
+    setGoals((prev) => [...prev, goalWithUser]);
     setShowModal(false);
-    if (goalsRepository.isEnabled()) {
-      void goalsRepository.upsertGoal(goal).catch((error) => {
+    if (goalsRepository.isEnabled() && user) {
+      void goalsRepository.upsertGoal(goalWithUser, user.id).catch((error) => {
         console.error("Failed to sync goal:", error);
       });
     }
@@ -119,8 +134,20 @@ export function Goals() {
           </div>
         </div>
 
+        {error && (
+          <div className="rounded-2xl bg-red-50 border border-red-100 p-4 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         {/* ── DUAS COLUNAS ── */}
-        {goals.length === 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-56 rounded-3xl bg-gray-100 animate-pulse" />
+            ))}
+          </div>
+        ) : goals.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Target className="size-14 text-gray-200 mb-4" />
             <p className="text-gray-500 font-medium">Nenhuma meta criada ainda.</p>
@@ -243,6 +270,11 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: string) => vo
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-gray-900 text-sm leading-snug">{goal.title}</h3>
           <p className="text-xs text-gray-500 mt-0.5">{goal.description}</p>
+          {goal.scheduledDate && (
+            <p className="text-[11px] text-gray-400 mt-2">
+              Agendada para {format(parseISO(goal.scheduledDate), "dd 'de' MMMM", { locale: ptBR })}
+            </p>
+          )}
         </div>
         <button
           onClick={() => onDelete(goal.id)}
@@ -319,6 +351,7 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: string) => vo
 function NewGoalModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Goal) => void }) {
   const [title, setTitle]           = useState("");
   const [description, setDescription] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
   const [type, setType]             = useState<"short" | "long">("short");
   const [steps, setSteps]           = useState<string[]>(["", ""]);
   const [error, setError]           = useState("");
@@ -352,6 +385,7 @@ function NewGoalModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Go
       description: description.trim() || "Meta criada pelo usuário",
       progress: 0,
       type,
+      scheduledDate: scheduledDate || undefined,
       steps: validSteps,
       completedSteps: 0,
     });
@@ -436,6 +470,19 @@ function NewGoalModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Go
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Ex: Chegar ao nível B2"
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-sm transition-colors"
+            />
+          </div>
+
+          {/* Data de conclusão */}
+          <div>
+            <label className="text-sm font-semibold text-gray-700 block mb-1.5">
+              Agendar para <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <input
+              type="date"
+              value={scheduledDate}
+              onChange={(e) => setScheduledDate(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-sm transition-colors"
             />
           </div>

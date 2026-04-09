@@ -1,6 +1,9 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { Brain, Home, MessageCircle, Plus, TrendingUp, Repeat, Target, Calendar } from "lucide-react";
+import { useEffect } from "react";
+import { Brain, Home, MessageCircle, Plus, TrendingUp, Repeat, Target, Calendar, LogOut, UserCircle } from "lucide-react";
 import { motion } from "motion/react";
+import { useAuth } from "./AuthProvider";
+import { isSupabaseConfigured } from "../lib/supabase";
 
 type NavItem = {
   path: string;
@@ -47,6 +50,13 @@ function NavButton({ item, isActive, onClick }: { item: NavItem; isActive: boole
 export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, loading, signOut } = useAuth();
+
+  useEffect(() => {
+    if (isSupabaseConfigured && !loading && !user && location.pathname !== "/") {
+      navigate("/login");
+    }
+  }, [user, loading, location.pathname, navigate]);
 
   if (location.pathname === "/") {
     return <Outlet />;
@@ -122,13 +132,35 @@ export function Layout() {
         </nav>
 
         {/* Footer tip */}
-        <div className="px-6 py-4 border-t border-gray-200 flex-shrink-0">
+        <div className="px-6 py-4 border-t border-gray-200 flex-shrink-0 space-y-3">
           <div className="bg-blue-50 rounded-lg p-3">
             <p className="text-xs text-blue-900 font-medium">💡 Dica</p>
             <p className="text-xs text-blue-700 mt-1">
               Foque em uma tarefa por vez para melhores resultados
             </p>
           </div>
+          {user && (
+            <div className="bg-white rounded-2xl p-3 border border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                  <UserCircle className="size-5 text-purple-600" />
+                </div>
+                <div className="flex-1 text-sm">
+                  <p className="font-medium text-gray-900">{user.email ?? "Usuário"}</p>
+                  <p className="text-xs text-gray-500">Conectado</p>
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  await signOut();
+                  navigate("/login");
+                }}
+                className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <LogOut className="size-4" /> Sair
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 

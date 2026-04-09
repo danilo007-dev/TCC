@@ -7,11 +7,14 @@ import {
   Paintbrush, Briefcase, Home, UtensilsCrossed,
   CalendarDays,
 } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "motion/react";
 import { HelpfulHint } from "./HelpfulHint";
 import confetti from "canvas-confetti";
 import { Routine } from "../types";
 import { routinesRepository } from "../repositories/routinesRepository";
+import { useAuth } from "./AuthProvider";
 
 // ─── Paleta de cores ──────────────────────────────────────────────────────────
 
@@ -65,6 +68,7 @@ const INITIAL_ROUTINES: Routine[] = [
   {
     id: "1", title: "Rotina Matinal", description: "Comece o dia com energia e foco",
     icon: "sun", colorKey: "green", isFavorite: true,
+    scheduledDate: new Date().toISOString().slice(0, 10),
     steps: [
       { id: "1-1", title: "Beber um copo d'água",        duration: "1 min",  completed: false },
       { id: "1-2", title: "Alongamento leve",             duration: "5 min",  completed: false },
@@ -75,6 +79,7 @@ const INITIAL_ROUTINES: Routine[] = [
   {
     id: "2", title: "Exercícios", description: "Manter o corpo ativo",
     icon: "dumbbell", colorKey: "purple", isFavorite: true,
+    scheduledDate: new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().slice(0, 10),
     steps: [
       { id: "2-1", title: "Aquecimento",                  duration: "5 min",  completed: false },
       { id: "2-2", title: "Treino principal",              duration: "30 min", completed: false },
@@ -126,30 +131,39 @@ export function Routines() {
   const [routines, setRoutines]     = useState<Routine[]>(INITIAL_ROUTINES);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showModal, setShowModal]   = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState("");
+  const { user } = useAuth();
 
   useEffect(() => {
-    if (!routinesRepository.isEnabled()) return;
+    if (!routinesRepository.isEnabled() || !user) return;
 
     const hydrate = async () => {
+      setLoading(true);
+      setError("");
+
       try {
-        const remoteRoutines = await routinesRepository.fetchRoutines();
+        const remoteRoutines = await routinesRepository.fetchRoutines(user.id);
         if (remoteRoutines.length > 0) {
           setRoutines(remoteRoutines);
           return;
         }
 
-        await Promise.all(INITIAL_ROUTINES.map((routine) => routinesRepository.upsertRoutine(routine)));
+        await Promise.all(INITIAL_ROUTINES.map((routine) => routinesRepository.upsertRoutine(routine, user.id)));
       } catch (error) {
         console.error("Failed to hydrate routines:", error);
+        setError("Não foi possível carregar suas rotinas. Verifique a conexão e tente novamente.");
+      } finally {
+        setLoading(false);
       }
     };
 
     void hydrate();
-  }, []);
+  }, [user]);
 
   const syncRoutine = (routine: Routine) => {
-    if (!routinesRepository.isEnabled()) return;
-    void routinesRepository.upsertRoutine(routine).catch((error) => {
+    if (!routinesRepository.isEnabled() || !user) return;
+    void routinesRepository.upsertRoutine(routine, user.id).catch((error) => {
       console.error("Failed to sync routine:", error);
     });
   };
@@ -199,9 +213,10 @@ export function Routines() {
   };
 
   const addRoutine = (routine: Routine) => {
-    setRoutines((prev) => [...prev, routine]);
+    const routineWithUser = { ...routine, userId: user?.id };
+    setRoutines((prev) => [...prev, routineWithUser]);
     setShowModal(false);
-    syncRoutine(routine);
+    syncRoutine(routineWithUser);
   };
 
   const favorites = routines.filter((r) => r.isFavorite);
@@ -236,6 +251,11 @@ export function Routines() {
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-bold text-gray-900">{selectedRoutine.title}</h1>
               <p className="text-gray-500 text-sm mt-1">{selectedRoutine.description}</p>
+              {selectedRoutine.scheduledDate && (
+                <p className="text-xs text-gray-400 mt-2">
+                  Agendada para {format(parseISO(selectedRoutine.scheduledDate), "dd 'de' MMMM", { locale: ptBR })}
+                </p>
+              )}
             </div>
             {completed > 0 && (
               <button
@@ -342,31 +362,47 @@ export function Routines() {
           Rotinas ajudam seu cérebro a entrar no modo certo sem precisar pensar. Use-as todos os dias!
         </HelpfulHint>
 
-        {favorites.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Star className="size-5 text-amber-500 fill-amber-500" />
-              <h2 className="text-lg font-semibold text-gray-900">Favoritas</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {favorites.map((routine, i) => (
-                <RoutineCard key={routine.id} routine={routine} index={i}
-                  onToggleFavorite={toggleFavorite} onClick={() => setSelectedId(routine.id)} />
-              ))}
-            </div>
+        {error && (
+          <div className="rounded-2xl bg-red-50 border border-red-100 p-4 text-sm text-red-700">
+            {error}
           </div>
         )}
 
-        {all.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900">Todas as Rotinas</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {all.map((routine, i) => (
-                <RoutineCard key={routine.id} routine={routine} index={i}
-                  onToggleFavorite={toggleFavorite} onClick={() => setSelectedId(routine.id)} />
-              ))}
-            </div>
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="h-52 rounded-3xl bg-gray-100 animate-pulse" />
+            ))}
           </div>
+        ) : (
+          <>
+            {favorites.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Star className="size-5 text-amber-500 fill-amber-500" />
+                  <h2 className="text-lg font-semibold text-gray-900">Favoritas</h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {favorites.map((routine, i) => (
+                    <RoutineCard key={routine.id} routine={routine} index={i}
+                      onToggleFavorite={toggleFavorite} onClick={() => setSelectedId(routine.id)} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {all.length > 0 && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-gray-900">Todas as Rotinas</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {all.map((routine, i) => (
+                    <RoutineCard key={routine.id} routine={routine} index={i}
+                      onToggleFavorite={toggleFavorite} onClick={() => setSelectedId(routine.id)} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </motion.div>
 
@@ -390,6 +426,7 @@ interface NewStep {
 function NewRoutineModal({ onClose, onSave }: { onClose: () => void; onSave: (r: Routine) => void }) {
   const [title, setTitle]           = useState("");
   const [description, setDescription] = useState("");
+  const [scheduledDate, setScheduledDate] = useState("");
   const [selectedIcon, setSelectedIcon] = useState("star");
   const [selectedColor, setSelectedColor] = useState("purple");
   const [steps, setSteps]           = useState<NewStep[]>([{ id: "new-1", title: "", duration: "" }]);
@@ -425,6 +462,7 @@ function NewRoutineModal({ onClose, onSave }: { onClose: () => void; onSave: (r:
       icon: selectedIcon,
       colorKey: selectedColor,
       isFavorite: false,
+      scheduledDate: scheduledDate || undefined,
       steps: validSteps.map((s, i) => ({
         id: `${Date.now()}-${i}`,
         title: s.title.trim(),
@@ -528,6 +566,19 @@ function NewRoutineModal({ onClose, onSave }: { onClose: () => void; onSave: (r:
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Ex: Para relaxar e se preparar"
+              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-sm transition-colors"
+            />
+          </div>
+
+          {/* Data agendada */}
+          <div>
+            <label className="text-sm font-semibold text-gray-700 block mb-1.5">
+              Agendar para <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <input
+              type="date"
+              value={scheduledDate}
+              onChange={(e) => setScheduledDate(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-sm transition-colors"
             />
           </div>
@@ -646,7 +697,12 @@ function RoutineCard({
       </div>
 
       <h3 className="font-semibold text-gray-900 mb-1 pr-6">{routine.title}</h3>
-      <p className="text-sm text-gray-500 mb-3">{routine.description}</p>
+      <p className="text-sm text-gray-500 mb-2">{routine.description}</p>
+      {routine.scheduledDate && (
+        <p className="text-xs text-gray-400 mb-3">
+          Agendada para {format(parseISO(routine.scheduledDate), "dd/MM/yyyy", { locale: ptBR })}
+        </p>
+      )}
 
       {hasProgress ? (
         <div>
