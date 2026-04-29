@@ -37,7 +37,7 @@ interface AppSettings {
   dailySummary: boolean;
 }
 
-const STORAGE_KEY = "focusflow.settings.v1";
+const STORAGE_KEY = "focusgrid.settings.v1";
 
 const DEFAULT_SETTINGS: AppSettings = {
   profileName: "",
@@ -170,7 +170,7 @@ export function Settings() {
             <h1 className="text-3xl font-semibold text-gray-900">Configuracoes</h1>
           </div>
           <p className="text-sm text-gray-500 mt-2">
-            Ajuste a experiencia do Focus Flow para o seu ritmo, foco e rotina.
+            Ajuste a experiencia do FocusGrid para o seu ritmo, foco e rotina.
           </p>
         </div>
 

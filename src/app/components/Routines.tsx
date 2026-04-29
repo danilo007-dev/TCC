@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import {
   Star, Sun, Moon, Dumbbell, Code, Pill, BookOpen,
-  Plus, ArrowLeft, CheckCircle2, Circle, RotateCcw,
+  Plus, ArrowLeft, CheckCircle2, Circle,
   Play, X, Trash2, Clock, Coffee, Wand2, Heart,
   Zap, Target, Music, Smartphone, Leaf, Sparkles,
   Paintbrush, Briefcase, Home, UtensilsCrossed,
@@ -167,14 +167,6 @@ export function Routines() {
     );
   };
 
-  const resetRoutine = (routineId: string) => {
-    setRoutines((prev) =>
-      prev.map((r) =>
-        r.id === routineId ? { ...r, steps: r.steps.map((s) => ({ ...s, completed: false })) } : r
-      )
-    );
-  };
-
   const addRoutine = (routine: Routine) => {
     setRoutines((prev) => [...prev, routine]);
     setShowModal(false);
@@ -213,15 +205,6 @@ export function Routines() {
               <h1 className="text-2xl font-bold text-gray-900">{selectedRoutine.title}</h1>
               <p className="text-gray-500 text-sm mt-1">{selectedRoutine.description}</p>
             </div>
-            {completed > 0 && (
-              <button
-                onClick={() => resetRoutine(selectedRoutine.id)}
-                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors px-3 py-2 rounded-lg hover:bg-gray-100 flex-shrink-0"
-              >
-                <RotateCcw className="size-3.5" />
-                Reiniciar
-              </button>
-            )}
           </div>
           <div className="mt-5">
             <div className="flex items-center justify-between mb-2">
@@ -279,16 +262,6 @@ export function Routines() {
           ))}
         </div>
 
-        {completed === 0 && (
-          <motion.button
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-            onClick={() => toggleStep(selectedRoutine.id, selectedRoutine.steps[0].id)}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-2xl font-bold text-base transition-colors shadow-lg shadow-purple-100 flex items-center justify-center gap-2"
-          >
-            <Play className="size-5" />
-            Começar rotina
-          </motion.button>
-        )}
       </motion.div>
     );
   }

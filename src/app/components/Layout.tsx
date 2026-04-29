@@ -1,6 +1,8 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { Brain, Home, MessageCircle, Plus, TrendingUp, Repeat, Target, Calendar, Wind, Settings } from "lucide-react";
+import { Home, MessageCircle, Plus, TrendingUp, Repeat, Target, Calendar, Wind, Settings } from "lucide-react";
 import { motion } from "motion/react";
+
+const appBrand = new URL("../../../LOGO/escrita-logo_FocusGrid.png?v=1", import.meta.url).href;
 
 export function Layout() {
   const location = useLocation();
@@ -48,15 +50,9 @@ export function Layout() {
   return (
     <div className="h-screen overflow-hidden bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
       <aside className="fixed top-0 left-0 w-64 h-screen bg-white/90 backdrop-blur-sm border-r border-gray-200 flex flex-col z-30">
-        <div className="px-6 py-6 border-b border-gray-200 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="bg-purple-100 p-2 rounded-lg">
-              <Brain className="size-6 text-purple-600" />
-            </div>
-            <div>
-              <span className="font-semibold text-gray-900 block">Focus Flow</span>
-              <span className="text-xs text-gray-500">Organize com foco</span>
-            </div>
+        <div className="px-4 py-5 border-b border-gray-200 flex-shrink-0">
+          <div className="h-11 w-[190px] overflow-hidden">
+            <img src={appBrand} alt="FocusGrid" className="h-full w-full object-cover object-left" />
           </div>
         </div>
 

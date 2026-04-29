@@ -1,4 +1,4 @@
-Estamos desenvolvendo um aplicativo de produtividade chamado Focus Flow, voltado especialmente para pessoas com TDAH. O aplicativo possui dois estados principais: modo planejamento (normal) e modo foco (execução de tarefas).
+Estamos desenvolvendo um aplicativo de produtividade chamado FocusGrid, voltado especialmente para pessoas com TDAH. O aplicativo possui dois estados principais: modo planejamento (normal) e modo foco (execução de tarefas).
 
 Queremos melhorar a tela que aparece quando o usuário clica em uma tarefa, transformando-a em um modo foco automático, projetado para minimizar distrações e facilitar o início da tarefa.
 
@@ -148,7 +148,7 @@ Essas mensagens devem ser discretas e não interferir na concentração.
 
 9. Manter consistência visual com o app
 
-manter paleta roxa do Focus Flow
+manter paleta roxa do FocusGrid
 
 manter estilo minimalista
 

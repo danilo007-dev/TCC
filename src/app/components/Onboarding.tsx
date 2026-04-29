@@ -10,7 +10,7 @@ export function Onboarding() {
   const steps = [
     {
       icon: Brain,
-      title: "Bem-vindo ao Focus Flow",
+      title: "Bem-vindo ao FocusGrid",
       description: "Um assistente cognitivo feito para você começar e completar tarefas sem sobrecarga.",
       color: "bg-purple-100 text-purple-600",
     },

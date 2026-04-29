@@ -2,6 +2,8 @@ import { Task } from "./types";
 
 // Simple in-memory store for demo purposes
 class TaskStore {
+  private readonly today = new Date().toISOString().slice(0, 10);
+
   private tasks: Task[] = [
     {
       id: "1",
@@ -11,6 +13,7 @@ class TaskStore {
       completed: false,
       progress: 0,
       timeOfDay: "09:00",
+      dueDate: this.today,
       color: "#A8E6CF",
       subtasks: [
         { id: "1-1", title: "Abrir o caderno", completed: false },
@@ -26,6 +29,7 @@ class TaskStore {
       completed: false,
       progress: 0,
       timeOfDay: "14:00",
+      dueDate: this.today,
       color: "#FFD3B6",
       subtasks: [
         { id: "2-1", title: "Pensar em ideias", completed: false },
@@ -41,6 +45,7 @@ class TaskStore {
       completed: false,
       progress: 0,
       timeOfDay: "16:00",
+      dueDate: this.today,
       color: "#FFAAA5",
       subtasks: [
         { id: "3-1", title: "Abrir documento", completed: false },

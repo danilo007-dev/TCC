@@ -7,6 +7,7 @@ export interface Task {
   subtasks: Subtask[];
   progress: number;
   timeOfDay?: string;
+  dueDate?: string; // yyyy-mm-dd
   color?: string;
 }
 

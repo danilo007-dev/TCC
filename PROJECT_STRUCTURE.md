@@ -1,7 +1,7 @@
-# Focus Flow - ADHD Task Organizer
+# FocusGrid - ADHD Task Organizer
 
 ## Overview
-Focus Flow is a cognitive assistance system designed specifically for people with ADHD and neurodivergent individuals. It helps reduce cognitive friction and assists users in starting and completing tasks.
+FocusGrid is a cognitive assistance system designed specifically for people with ADHD and neurodivergent individuals. It helps reduce cognitive friction and assists users in starting and completing tasks.
 
 ## Key Features
 

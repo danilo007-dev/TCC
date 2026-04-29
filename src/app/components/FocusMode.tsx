@@ -62,9 +62,25 @@ export function FocusMode() {
   const handleExitDeepFocus = () => { setIsDeepFocus(false); document.body.style.overflow = ""; };
 
   const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
+    if (hours > 0) {
+      const remMins = Math.floor((seconds % 3600) / 60);
+      return `${hours.toString().padStart(2, "0")}:${remMins
+        .toString()
+        .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    }
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const formatTotalDurationText = (minutes: number) => {
+    if (minutes >= 60) {
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return `de ${h.toString().padStart(2, "0")}h${m.toString().padStart(2, "0")}`;
+    }
+    return `de ${minutes} minutos`;
   };
 
   if (!task) {
@@ -293,7 +309,7 @@ export function FocusMode() {
               <div className="text-5xl font-bold text-purple-900 tabular-nums leading-none mb-1">
                 {formatTime(timeRemaining)}
               </div>
-              <p className="text-sm text-purple-400 mb-5">de {task.duration} minutos</p>
+              <p className="text-sm text-purple-400 mb-5">{formatTotalDurationText(task.duration)}</p>
 
               {/* Círculo de progresso */}
               <div className="flex justify-center mb-5">

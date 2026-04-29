@@ -10,6 +10,8 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
 
+  const today = new Date().toISOString().slice(0, 10);
+
   useEffect(() => {
     setTasks(taskStore.getTasks());
     const unsubscribe = taskStore.subscribe(() => {
@@ -18,9 +20,15 @@ export function Dashboard() {
     return unsubscribe;
   }, []);
 
-  const incompleteTasks = tasks.filter((t) => !t.completed);
-  const completedCount = taskStore.getCompletedTasksCount();
-  const totalCount = taskStore.getTotalTasksCount();
+  const tasksForSelectedDate = tasks.filter((task) => {
+    if (task.dueDate) return task.dueDate === today;
+    return true;
+  });
+
+  const incompleteTasks = tasksForSelectedDate.filter((t) => !t.completed);
+  const completedTasks = tasksForSelectedDate.filter((t) => t.completed);
+  const completedCount = completedTasks.length;
+  const totalCount = tasksForSelectedDate.length;
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -64,12 +72,12 @@ export function Dashboard() {
         <h1 className="text-3xl font-semibold text-gray-900">{getGreeting()}</h1>
         <p className="text-gray-600 mt-1">
           {incompleteTasks.length === 0
-            ? "Você completou todas as tarefas! 🎉"
+            ? "Você completou todas as tarefas de hoje! 🎉"
             : `${incompleteTasks.length} ${incompleteTasks.length === 1 ? "tarefa" : "tarefas"} para hoje`}
         </p>
       </div>
 
-      {completedCount > 0 && (
+      {totalCount > 0 && (
         <div className="bg-white rounded-2xl p-4 border border-gray-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -77,14 +85,14 @@ export function Dashboard() {
                 <CheckCircle2 className="size-6 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Progresso de hoje</p>
+                <p className="text-sm text-gray-600">Progresso do dia</p>
                 <p className="text-lg font-semibold text-gray-900">
                   {completedCount} de {totalCount} completas
                 </p>
               </div>
             </div>
             <div className="text-2xl">
-              {completedCount === totalCount ? "🎉" : "💪"}
+              {completedCount === totalCount && totalCount > 0 ? "🎉" : "💪"}
             </div>
           </div>
         </div>
@@ -200,12 +208,11 @@ export function Dashboard() {
         )}
       </div>
 
-      {completedCount > 0 && (
+      {completedTasks.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-gray-900 mb-3">Completadas</h2>
           <div className="space-y-2">
-            {tasks
-              .filter((t) => t.completed)
+            {completedTasks
               .map((task) => (
                 <motion.div
                   key={task.id}

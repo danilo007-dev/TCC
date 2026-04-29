@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, X, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
+import { taskStore } from "../store";
+import { Task } from "../types";
 import {
   format,
   startOfMonth,
@@ -30,19 +32,12 @@ const TYPE_CONFIG = {
 
 const WEEK_DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-const EVENTS: CalendarEvent[] = [
-  { id: "1",  date: new Date(2026, 2, 13), title: "Tomar medicação",    type: "routine" },
-  { id: "2",  date: new Date(2026, 2, 13), title: "Revisar projeto",    type: "task",    taskId: "1" },
-  { id: "3",  date: new Date(2026, 2, 14), title: "Exercícios",         type: "routine" },
-  { id: "4",  date: new Date(2026, 2, 15), title: "Estudar React",      type: "goal"    },
-  { id: "5",  date: new Date(2026, 2, 16), title: "Tomar medicação",    type: "routine" },
-  { id: "6",  date: new Date(2026, 2, 18), title: "Reunião importante", type: "task",    taskId: "2" },
-  { id: "7",  date: new Date(2026, 2, 18), title: "Estudar biologia",   type: "task",    taskId: "1" },
-  { id: "8",  date: new Date(2026, 2, 18), title: "Exercícios",         type: "routine" },
-  { id: "9",  date: new Date(2026, 2, 20), title: "Exercícios",         type: "routine" },
-  { id: "10", date: new Date(2026, 2, 22), title: "Ler livro",          type: "goal"    },
-  { id: "11", date: new Date(2026, 2, 25), title: "Comprar presente",   type: "task",    taskId: "2" },
-  { id: "12", date: new Date(2026, 2, 25), title: "Trabalho história",  type: "task",    taskId: "3" },
+const STATIC_EVENTS: CalendarEvent[] = [
+  { id: "r-1", date: new Date(2026, 2, 13), title: "Tomar medicação", type: "routine" },
+  { id: "r-2", date: new Date(2026, 2, 14), title: "Exercícios", type: "routine" },
+  { id: "g-1", date: new Date(2026, 2, 15), title: "Estudar React", type: "goal" },
+  { id: "r-3", date: new Date(2026, 2, 20), title: "Exercícios", type: "routine" },
+  { id: "g-2", date: new Date(2026, 2, 22), title: "Ler livro", type: "goal" },
 ];
 
 const MAX_VISIBLE = 2;
@@ -51,12 +46,33 @@ export function CalendarView() {
   const navigate = useNavigate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    setTasks(taskStore.getTasks());
+    const unsubscribe = taskStore.subscribe(() => setTasks(taskStore.getTasks()));
+    return unsubscribe;
+  }, []);
+
+  const taskEvents = useMemo<CalendarEvent[]>(() => {
+    return tasks
+      .filter((task) => task.dueDate)
+      .map((task) => ({
+        id: `task-${task.id}`,
+        date: new Date(`${task.dueDate}T00:00:00`),
+        title: task.title,
+        type: "task",
+        taskId: task.id,
+      }));
+  }, [tasks]);
+
+  const events = useMemo(() => [...STATIC_EVENTS, ...taskEvents], [taskEvents]);
 
   const monthStart   = startOfMonth(currentMonth);
   const daysInMonth  = eachDayOfInterval({ start: monthStart, end: endOfMonth(currentMonth) });
   const startWeekday = monthStart.getDay();
 
-  const getEvents = (date: Date) => EVENTS.filter((e) => isSameDay(e.date, date));
+  const getEvents = (date: Date) => events.filter((e) => isSameDay(e.date, date));
   const selectedEvents = selectedDate ? getEvents(selectedDate) : [];
 
   const handleDayClick = (day: Date) => {
